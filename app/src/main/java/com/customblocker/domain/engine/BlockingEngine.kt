@@ -9,22 +9,31 @@ sealed interface BlockDecision {
     data object Allow : BlockDecision
 }
 
+enum class BlockingMode { BLOCKLIST, ALLOWLIST }
+
+/**
+ * Immutable snapshot the engine evaluates against. Produced from the DB (Phase 2) and, later,
+ * narrowed by active conditions (Phase 3). Swapped atomically via [BlockingEngine.update].
+ */
+data class EngineSnapshot(
+    val enabled: Boolean = false,
+    val mode: BlockingMode = BlockingMode.BLOCKLIST,
+    val apps: Set<String> = emptySet(),
+)
+
 /**
  * Pure decision core — NO Android imports, so it unit-tests on the JVM (PLAN.md §7).
- *
- * Phase 1: a hardcoded/settable block set is enough to prove the accessibility + overlay
- * mechanism end to end. Phase 2 replaces [blockedPackages] with a DB-backed snapshot, and
- * Phase 3 layers the condition (time/wifi/location/...) evaluation on top before this returns
- * Block. The interface (`decide`) stays the same.
+ * The `decide` contract is stable; only what feeds [snapshot] grows in later phases.
  */
 @Singleton
 class BlockingEngine @Inject constructor() {
 
-    /** Packages currently subject to blocking. Volatile: written from UI/IPC, read on the a11y thread. */
+    /** Volatile: written from the DB-sync coroutine, read on the accessibility thread. */
     @Volatile
-    var blockedPackages: Set<String> = DEFAULT_BLOCKED
+    var snapshot: EngineSnapshot = EngineSnapshot()
+        private set
 
-    /** Packages we must never block (would soft-brick the device / block ourselves). */
+    /** Packages we must never block (would soft-brick the device / lock the user out). */
     private val neverBlock: Set<String> = setOf(
         "com.android.systemui",
         "com.google.android.apps.nexuslauncher",
@@ -32,17 +41,22 @@ class BlockingEngine @Inject constructor() {
         "com.android.launcher3",
     )
 
-    fun decide(packageName: String?): BlockDecision {
-        if (packageName.isNullOrBlank()) return BlockDecision.Allow
-        if (packageName in neverBlock) return BlockDecision.Allow
-        if (packageName in blockedPackages) {
-            return BlockDecision.Block(packageName, "in block list")
-        }
-        return BlockDecision.Allow
+    fun update(newSnapshot: EngineSnapshot) {
+        snapshot = newSnapshot
     }
 
-    companion object {
-        /** Seeded for the Phase 1 demo; Chrome is the canonical test target from PLAN.md §17. */
-        val DEFAULT_BLOCKED: Set<String> = setOf("com.android.chrome")
+    fun decide(packageName: String?): BlockDecision {
+        val s = snapshot
+        if (!s.enabled) return BlockDecision.Allow
+        if (packageName.isNullOrBlank()) return BlockDecision.Allow
+        if (packageName in neverBlock) return BlockDecision.Allow
+
+        val blocked = when (s.mode) {
+            BlockingMode.BLOCKLIST -> packageName in s.apps
+            BlockingMode.ALLOWLIST -> packageName !in s.apps
+        }
+        if (!blocked) return BlockDecision.Allow
+        val reason = if (s.mode == BlockingMode.BLOCKLIST) "in block list" else "not in allow list"
+        return BlockDecision.Block(packageName, reason)
     }
 }
