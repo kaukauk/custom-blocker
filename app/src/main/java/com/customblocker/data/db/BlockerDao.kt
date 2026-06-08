@@ -100,6 +100,13 @@ interface BlockerDao {
     @Query("DELETE FROM profile_websites WHERE id = :id")
     suspend fun removeWebsite(id: Long)
 
+    // --- usage counters (persisted runtime state) ---
+    @Query("SELECT * FROM usage_counters")
+    suspend fun getAllUsageCounters(): List<UsageCounterEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertUsageCounter(counter: UsageCounterEntity)
+
     // --- geofences ---
     @Query("SELECT * FROM geo_addresses")
     fun observeAllGeo(): Flow<List<GeoAddressEntity>>

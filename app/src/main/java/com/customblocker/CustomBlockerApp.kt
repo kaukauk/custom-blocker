@@ -3,6 +3,7 @@ package com.customblocker
 import android.app.Application
 import com.customblocker.domain.engine.EngineSync
 import com.customblocker.service.conditions.SignalsCoordinator
+import com.customblocker.service.conditions.UsageTracker
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -17,6 +18,7 @@ class CustomBlockerApp : Application() {
     interface AppEntryPoint {
         fun engineSync(): EngineSync
         fun signalsCoordinator(): SignalsCoordinator
+        fun usageTracker(): UsageTracker
     }
 
     override fun onCreate() {
@@ -24,7 +26,9 @@ class CustomBlockerApp : Application() {
         // osmdroid needs a user-agent set before any tiles load, or tile servers 403.
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         val entry = EntryPointAccessors.fromApplication(this, AppEntryPoint::class.java)
-        // Start the live condition signals (wifi/charger) and stream DB rules into the engine.
+        // Restore persisted usage counters, start the live condition signals (wifi/charger), and
+        // stream DB rules into the engine.
+        entry.usageTracker().load()
         entry.signalsCoordinator().start()
         entry.engineSync().start()
     }

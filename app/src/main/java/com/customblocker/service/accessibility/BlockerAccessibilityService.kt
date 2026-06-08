@@ -2,6 +2,8 @@ package com.customblocker.service.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
@@ -9,6 +11,7 @@ import com.customblocker.domain.engine.BlockDecision
 import com.customblocker.domain.engine.BlockingEngine
 import com.customblocker.service.conditions.ContextProvider
 import com.customblocker.service.conditions.UsageTracker
+import com.customblocker.service.monitoring.StatusNotification
 import com.customblocker.service.overlay.OverlayController
 import com.customblocker.util.L
 import dagger.hilt.android.AndroidEntryPoint
@@ -49,6 +52,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         powerManager = getSystemService(PowerManager::class.java)
         engine.selfPackage = packageName   // never block ourselves (can't lock the user out)
+        promoteToForeground()
         L.d(L.FG, "accessibility service connected")
         // Mid-session ticker: accrue usage + re-evaluate the current app every few seconds.
         scope.launch {
@@ -151,6 +155,30 @@ class BlockerAccessibilityService : AccessibilityService() {
                 .addCategory(Intent.CATEGORY_HOME)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
+    }
+
+    /**
+     * Promote this (system-bound) service to a foreground service so the process gets high priority
+     * and resists being killed under memory pressure. Best-effort: if the platform refuses (it
+     * shouldn't here — we're already running), blocking still works without it.
+     */
+    private fun promoteToForeground() {
+        try {
+            StatusNotification.ensureChannel(this)
+            val notification = StatusNotification.build(this)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    StatusNotification.NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else {
+                startForeground(StatusNotification.NOTIFICATION_ID, notification)
+            }
+            L.d(L.FG, "promoted to foreground service")
+        } catch (t: Throwable) {
+            L.e(L.FG, "startForeground failed (continuing without FGS)", t)
+        }
     }
 
     override fun onInterrupt() {
