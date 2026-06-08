@@ -36,6 +36,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.customblocker.domain.engine.BlockingMode
 import com.customblocker.ui.onboarding.PermissionBanner
 import com.customblocker.ui.onboarding.rememberPermissionState
+import com.customblocker.ui.strict.LockViewModel
+import com.customblocker.ui.strict.LockedBanner
+import com.customblocker.ui.strict.UnlockDialog
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,10 +51,23 @@ fun BlockListScreen(
     onOpenWebsites: () -> Unit,
     onBack: () -> Unit,
     viewModel: BlockListViewModel = hiltViewModel(),
+    lockViewModel: LockViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val perms by rememberPermissionState()
     val (accessibilityOn, overlayOn) = perms
+    val lock by lockViewModel.state.collectAsStateWithLifecycle()
+    val locked = lock.locked
+    var showUnlock by remember { mutableStateOf(false) }
+
+    if (showUnlock) {
+        UnlockDialog(
+            config = lock.config,
+            lockViewModel = lockViewModel,
+            onUnlocked = { showUnlock = false },
+            onDismiss = { showUnlock = false },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -62,8 +81,10 @@ fun BlockListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddApps) {
-                Icon(Icons.Default.Add, contentDescription = "Add apps")
+            if (!locked) {
+                FloatingActionButton(onClick = onAddApps) {
+                    Icon(Icons.Default.Add, contentDescription = "Add apps")
+                }
             }
         },
     ) { padding ->
@@ -74,6 +95,9 @@ fun BlockListScreen(
             ) {
                 item {
                     PermissionBanner(accessibilityOn = accessibilityOn, overlayOn = overlayOn)
+                }
+                if (locked) {
+                    item { LockedBanner(onUnlock = { showUnlock = true }) }
                 }
                 item {
                     Row(
@@ -88,7 +112,11 @@ fun BlockListScreen(
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
-                        Switch(checked = state.enabled, onCheckedChange = viewModel::setEnabled)
+                        Switch(
+                            checked = state.enabled,
+                            onCheckedChange = { if (locked) showUnlock = true else viewModel.setEnabled(it) },
+                            enabled = !locked,
+                        )
                     }
                 }
                 item {
@@ -97,11 +125,13 @@ fun BlockListScreen(
                             selected = state.mode == BlockingMode.BLOCKLIST,
                             onClick = { viewModel.setMode(BlockingMode.BLOCKLIST) },
                             label = { Text("Block list") },
+                            enabled = !locked,
                         )
                         FilterChip(
                             selected = state.mode == BlockingMode.ALLOWLIST,
                             onClick = { viewModel.setMode(BlockingMode.ALLOWLIST) },
                             label = { Text("Allow list") },
+                            enabled = !locked,
                         )
                     }
                 }
@@ -146,7 +176,7 @@ fun BlockListScreen(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            IconButton(onClick = { viewModel.removeApp(app.packageName) }) {
+                            IconButton(onClick = { viewModel.removeApp(app.packageName) }, enabled = !locked) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove")
                             }
                         }
