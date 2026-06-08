@@ -39,6 +39,20 @@ object Permissions {
 
     fun canDrawOverlays(context: Context): Boolean = Settings.canDrawOverlays(context)
 
+    /** Whether our NotificationListenerService is enabled (needed to suppress notifications). */
+    fun isNotificationAccessGranted(context: Context): Boolean {
+        val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners").orEmpty()
+        val pkg = context.packageName
+        return flat.split(':').any { ComponentName.unflattenFromString(it)?.packageName == pkg }
+    }
+
+    fun openNotificationAccessSettings(context: Context) {
+        context.startActivity(
+            Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
     fun openAccessibilitySettings(context: Context) {
         context.startActivity(
             Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)

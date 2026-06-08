@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.Column
 import com.customblocker.domain.engine.BlockingMode
 import com.customblocker.ui.onboarding.PermissionBanner
 import com.customblocker.ui.onboarding.rememberPermissionState
@@ -59,6 +60,8 @@ fun BlockListScreen(
     val lock by lockViewModel.state.collectAsStateWithLifecycle()
     val locked = lock.locked
     var showUnlock by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val notificationAccess by com.customblocker.ui.onboarding.rememberNotificationAccessState()
 
     if (showUnlock) {
         UnlockDialog(
@@ -146,6 +149,45 @@ fun BlockListScreen(
                     }
                 }
                 item {
+                    Text("Behavior", style = MaterialTheme.typography.titleSmall)
+                    HorizontalDivider(Modifier.padding(top = 4.dp))
+                }
+                item {
+                    ToggleRow(
+                        title = "Block launching",
+                        subtitle = "Eject when a blocked app is opened.",
+                        checked = state.blockLaunch,
+                        enabled = !locked,
+                        onCheckedChange = viewModel::setBlockLaunch,
+                    )
+                }
+                item {
+                    ToggleRow(
+                        title = "Block notifications",
+                        subtitle = "Silently dismiss notifications from blocked apps (needs notification access).",
+                        checked = state.blockNotifications,
+                        enabled = !locked,
+                        onCheckedChange = viewModel::setBlockNotifications,
+                    )
+                }
+                if (state.blockNotifications && !notificationAccess) {
+                    item {
+                        OutlinedButton(
+                            onClick = { com.customblocker.ui.onboarding.Permissions.openNotificationAccessSettings(context) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Grant notification access") }
+                    }
+                }
+                item {
+                    ToggleRow(
+                        title = "Auto-block new apps",
+                        subtitle = "Add newly-installed apps to this profile automatically.",
+                        checked = state.addNewApps,
+                        enabled = !locked,
+                        onCheckedChange = viewModel::setAddNewApps,
+                    )
+                }
+                item {
                     Text(
                         if (state.mode == BlockingMode.BLOCKLIST) "Blocked apps (${state.apps.size})"
                         else "Allowed apps (${state.apps.size})",
@@ -184,5 +226,26 @@ fun BlockListScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }
