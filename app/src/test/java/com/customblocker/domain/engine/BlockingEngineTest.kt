@@ -6,59 +6,129 @@ import org.junit.Test
 
 class BlockingEngineTest {
 
-    private fun engine(snapshot: EngineSnapshot) = BlockingEngine().apply { update(snapshot) }
+    private val CHROME = "com.android.chrome"
 
-    private fun blocklist(vararg apps: String, enabled: Boolean = true) =
-        EngineSnapshot(enabled = enabled, mode = BlockingMode.BLOCKLIST, apps = apps.toSet())
+    private fun engine(vararg rules: ProfileRule) = BlockingEngine().apply { update(rules.toList()) }
 
-    private fun allowlist(vararg apps: String, enabled: Boolean = true) =
-        EngineSnapshot(enabled = enabled, mode = BlockingMode.ALLOWLIST, apps = apps.toSet())
+    private fun ctx(
+        dayBit: Int = DayFlags.MON,
+        minute: Int = 10 * 60,
+        wifi: String? = null,
+        charging: Boolean = false,
+        inside: Set<String> = emptySet(),
+    ) = BlockContext(dayBit, minute, wifi, charging, inside)
 
-    @Test
-    fun blocklist_blocksListedPackage() {
-        val d = engine(blocklist("com.android.chrome")).decide("com.android.chrome")
-        assertTrue(d is BlockDecision.Block)
-        assertEquals("com.android.chrome", (d as BlockDecision.Block).packageName)
+    private fun rule(
+        apps: Set<String> = setOf(CHROME),
+        enabled: Boolean = true,
+        mode: BlockingMode = BlockingMode.BLOCKLIST,
+        mask: Int = 0,
+        dayFlags: Int = DayFlags.ALL,
+        windows: List<TimeWindow> = emptyList(),
+        ssids: Set<String> = emptySet(),
+        fences: List<GeofenceSpec> = emptyList(),
+    ) = ProfileRule(1, "Test", enabled, mode, apps, mask, dayFlags, windows, ssids, fences)
+
+    private fun blocked(d: BlockDecision) = d is BlockDecision.Block
+
+    // --- no conditions (always active) ---
+    @Test fun noConditions_blocklist_blocksListed() {
+        assertTrue(blocked(engine(rule()).decide(CHROME, ctx())))
     }
 
-    @Test
-    fun blocklist_allowsUnlistedPackage() {
-        assertEquals(BlockDecision.Allow, engine(blocklist("com.android.chrome")).decide("com.foo.bar"))
+    @Test fun disabledProfile_allows() {
+        assertEquals(BlockDecision.Allow, engine(rule(enabled = false)).decide(CHROME, ctx()))
     }
 
-    @Test
-    fun allowlist_blocksUnlistedPackage() {
-        val d = engine(allowlist("com.foo.bar")).decide("com.android.chrome")
-        assertTrue(d is BlockDecision.Block)
+    // --- TIME ---
+    @Test fun time_insideWindowAndDay_blocks() {
+        val r = rule(mask = ConditionTypes.TIME, dayFlags = DayFlags.MON, windows = listOf(TimeWindow(9 * 60, 17 * 60)))
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(dayBit = DayFlags.MON, minute = 10 * 60))))
     }
 
-    @Test
-    fun allowlist_allowsListedPackage() {
-        assertEquals(BlockDecision.Allow, engine(allowlist("com.foo.bar")).decide("com.foo.bar"))
+    @Test fun time_outsideWindow_allows() {
+        val r = rule(mask = ConditionTypes.TIME, windows = listOf(TimeWindow(9 * 60, 17 * 60)))
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(minute = 18 * 60)))
     }
 
-    @Test
-    fun disabledProfile_allowsEverything() {
-        assertEquals(BlockDecision.Allow, engine(blocklist("com.android.chrome", enabled = false)).decide("com.android.chrome"))
+    @Test fun time_wrongDay_allows() {
+        val r = rule(mask = ConditionTypes.TIME, dayFlags = DayFlags.SAT or DayFlags.SUN, windows = listOf(TimeWindow(0, 24 * 60 - 1)))
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(dayBit = DayFlags.MON)))
     }
 
-    @Test
-    fun allowsNullOrBlankPackage() {
-        val e = engine(blocklist("com.android.chrome"))
-        assertEquals(BlockDecision.Allow, e.decide(null))
-        assertEquals(BlockDecision.Allow, e.decide(""))
-        assertEquals(BlockDecision.Allow, e.decide("   "))
+    @Test fun time_wrapsMidnight() {
+        val r = rule(mask = ConditionTypes.TIME, windows = listOf(TimeWindow(22 * 60, 6 * 60)))
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(minute = 23 * 60))))   // 23:00 inside
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(minute = 2 * 60))))    // 02:00 inside
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(minute = 12 * 60))) // noon outside
     }
 
-    @Test
-    fun neverBlocksSystemUiOrLauncher_inBothModes() {
-        assertEquals(BlockDecision.Allow, engine(blocklist("com.android.systemui")).decide("com.android.systemui"))
-        // allow-list with an empty-ish set would otherwise block the launcher.
-        assertEquals(BlockDecision.Allow, engine(allowlist("com.foo.bar")).decide("com.google.android.apps.nexuslauncher"))
+    // --- WIFI ---
+    @Test fun wifi_matchingSsid_blocks() {
+        val r = rule(mask = ConditionTypes.WIFI, ssids = setOf("Office"))
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(wifi = "Office"))))
     }
 
-    @Test
-    fun emptyEnabledBlocklist_allowsEverything() {
-        assertEquals(BlockDecision.Allow, engine(blocklist()).decide("com.android.chrome"))
+    @Test fun wifi_differentOrNoSsid_allows() {
+        val r = rule(mask = ConditionTypes.WIFI, ssids = setOf("Office"))
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(wifi = "Home")))
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(wifi = null)))
+    }
+
+    // --- CHARGER ---
+    @Test fun charger_charging_blocks_otherwiseAllows() {
+        val r = rule(mask = ConditionTypes.CHARGER)
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(charging = true))))
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(charging = false)))
+    }
+
+    // --- LOCATION ---
+    @Test fun location_insideGeofence_blocks() {
+        val r = rule(mask = ConditionTypes.LOCATION, fences = listOf(GeofenceSpec("home")))
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(inside = setOf("home")))))
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(inside = emptySet())))
+    }
+
+    @Test fun location_inverted_blocksWhenOutside() {
+        val r = rule(mask = ConditionTypes.LOCATION, fences = listOf(GeofenceSpec("home", inverted = true)))
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(inside = emptySet()))))
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(inside = setOf("home"))))
+    }
+
+    // --- AND combination ---
+    @Test fun and_bothConditionsRequired() {
+        val r = rule(
+            mask = ConditionTypes.TIME or ConditionTypes.WIFI,
+            windows = listOf(TimeWindow(9 * 60, 17 * 60)),
+            ssids = setOf("Office"),
+        )
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(minute = 10 * 60, wifi = "Office"))))   // both
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(minute = 10 * 60, wifi = "Home"))) // wifi fails
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(minute = 20 * 60, wifi = "Office"))) // time fails
+    }
+
+    // --- multi-profile OR ---
+    @Test fun multiProfile_anyActiveBlocks() {
+        val timeProfile = rule(mask = ConditionTypes.TIME, windows = listOf(TimeWindow(0, 1))) // basically never
+        val chargerProfile = rule(mask = ConditionTypes.CHARGER)
+        assertTrue(blocked(engine(timeProfile, chargerProfile).decide(CHROME, ctx(minute = 12 * 60, charging = true))))
+    }
+
+    // --- allow-list ---
+    @Test fun allowlist_blocksUnlistedWhenActive() {
+        val r = rule(apps = setOf("com.foo"), mode = BlockingMode.ALLOWLIST, mask = ConditionTypes.CHARGER)
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(charging = true))))
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(charging = false))) // inactive
+    }
+
+    // --- guards ---
+    @Test fun neverBlocksLauncherOrSystemUi() {
+        val r = rule(apps = setOf("com.android.systemui"))
+        assertEquals(BlockDecision.Allow, engine(r).decide("com.android.systemui", ctx()))
+    }
+
+    @Test fun allowsNullOrBlank() {
+        assertEquals(BlockDecision.Allow, engine(rule()).decide(null, ctx()))
+        assertEquals(BlockDecision.Allow, engine(rule()).decide("  ", ctx()))
     }
 }

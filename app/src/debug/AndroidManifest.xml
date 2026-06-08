@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Debug-only: lets the CLI injection harness force condition signals (PLAN.md §15). -->
+    <application>
+        <receiver
+            android:name=".debug.DebugSignalReceiver"
+            android:exported="true" />
+    </application>
+</manifest>

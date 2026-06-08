@@ -13,6 +13,39 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ---
 
+## 2026-06-08 — Phase 3: conditions engine (time / wifi / charger / location)
+
+**Branch:** `phase3-conditions` → merged to `master`. **State:** ✅ COMPLETE, verified on emulator.
+
+Made blocking conditional. A profile is schedule-active when ALL its enabled conditions are met
+(AND); a package is blocked if ANY active profile blocks it (OR). Engine is multi-profile-ready.
+- `domain/engine/Conditions.kt`: pure `TimeWindow` (wraps midnight), `GeofenceSpec` (inverted),
+  `ProfileRule`, `BlockContext`, `ConditionTypes`/`DayFlags` bitmasks, `ConditionEvaluator`.
+  `BlockingEngine` now holds `List<ProfileRule>` and `decide(pkg, ctx)`. 16 JVM unit tests (truth
+  table: each condition, AND combos, multi-profile OR, midnight-wrap, inverted geofence, guards).
+- Room v2: `time_intervals`, `wifi_networks`, `geo_addresses` + profile cols `conditionsMask`,
+  `dayFlags`. `BlockerRepository.profileRules(): Flow<List<ProfileRule>>` (combine of 5 flows) +
+  condition CRUD. `EngineSync` now streams the rule list.
+- Live signals: `service/conditions/` — `LiveSignals` holder, `ContextProvider` (clock + signals,
+  honours debug overrides), `ChargerMonitor` (receiver), `WifiMonitor` (NetworkCallback;
+  SSID needs location perm on API27+ → harness covers testing). Started from Application via the
+  Hilt EntryPoint. A11y service builds ctx per foreground event and calls `decide(pkg, ctx)`.
+- Debug injection harness (`src/debug` only): `DebugSignalReceiver` — adb broadcasts force
+  wifi/charging/time/geofence overrides (SET_WIFI/SET_CHARGING/SET_TIME/SET_GEOFENCE/CLEAR).
+- UI: `ConditionsScreen` (enable switches per condition, day chips, time-window picker, wifi SSID
+  list, charger toggle) + ViewModel; reachable from home via a "Conditions" button.
+
+Verified on emulator: added Chrome (apps=1); enabled Charger condition via UI (mask=4); harness
+`SET_CHARGING false` → Chrome ALLOWED; `SET_CHARGING true` → Chrome BLOCKED + ejected. Exit
+criterion met (injected signal flips decision per the unit-tested truth table).
+
+**Scoped/deferred (stated to user):** USAGE_LIMIT + LAUNCH_COUNT (need a usage-accumulation
+subsystem); real geofence registration (GeofencingClient) + map-picker UI (engine + injection
+support LOCATION already); multi-profile management UI (engine/data already multi-profile).
+Also: time-window picker dial wasn't automation-tested (clock-dial taps are impractical headless)
+— logic is unit-tested; manual check pending. Mid-session time-boundary re-eval not yet wired
+(blocking is evaluated on foreground events) — alarms come in the persistence phase.
+
 ## 2026-06-08 — Phase 2: data model + configurable block list
 
 **Branch:** `phase2-data-model` → merged to `master`. **State:** ✅ COMPLETE, verified on emulator.
