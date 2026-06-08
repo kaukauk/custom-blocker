@@ -65,6 +65,10 @@ data class ProfileRule(
     val geofences: List<GeofenceSpec> = emptyList(),
     val usageLimit: UsageLimitSpec? = null,
     val launchLimit: LaunchLimitSpec? = null,
+    /** Blocked websites/keywords; matched against browser URL-bar text. */
+    val websites: List<WebsiteRule> = emptyList(),
+    /** Block the whole browser when its URL can't be read (PLAN.md §10). */
+    val blockUnsupportedBrowsers: Boolean = false,
 )
 
 /** The live signals the engine evaluates a profile against at a moment in time. */

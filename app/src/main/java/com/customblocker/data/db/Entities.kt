@@ -22,6 +22,8 @@ data class ProfileEntity(
     val conditionsMask: Int = 0,
     /** Day-of-week bitmask for the TIME condition (DayFlags.*). */
     val dayFlags: Int = 127,
+    /** Block the whole browser when its URL can't be read (PLAN.md §10). */
+    val blockUnsupportedBrowsers: Boolean = false,
 )
 
 @Entity(
@@ -80,6 +82,23 @@ data class UsageLimitEntity(
     val amount: Int,
     /** true = resets daily, false = resets hourly. */
     val periodDaily: Boolean = true,
+)
+
+@Entity(
+    tableName = "profile_websites",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("profileId"), Index(value = ["profileId", "value", "matchType"], unique = true)],
+)
+data class WebsiteEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    /** Already normalized for its match type (lowercased; host for DOMAIN, scheme-stripped for EXACT). */
+    val value: String,
+    /** 0 = DOMAIN, 1 = KEYWORD, 2 = EXACT (UrlMatchType.ordinal). */
+    val matchType: Int,
+    val enabled: Boolean = true,
 )
 
 @Entity(

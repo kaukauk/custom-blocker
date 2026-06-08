@@ -6,6 +6,7 @@ import com.customblocker.data.db.ProfileAppEntity
 import com.customblocker.data.db.ProfileEntity
 import com.customblocker.data.db.TimeIntervalEntity
 import com.customblocker.data.db.UsageLimitEntity
+import com.customblocker.data.db.WebsiteEntity
 import com.customblocker.data.db.WifiNetworkEntity
 import com.customblocker.domain.engine.BlockingMode
 import com.customblocker.domain.engine.GeofenceSpec
@@ -13,7 +14,10 @@ import com.customblocker.domain.engine.LaunchLimitSpec
 import com.customblocker.domain.engine.LimitPeriod
 import com.customblocker.domain.engine.ProfileRule
 import com.customblocker.domain.engine.TimeWindow
+import com.customblocker.domain.engine.UrlMatchType
+import com.customblocker.domain.engine.UrlMatcher
 import com.customblocker.domain.engine.UsageLimitSpec
+import com.customblocker.domain.engine.WebsiteRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -38,7 +42,7 @@ class BlockerRepository @Inject constructor(
 
     /** The engine's view: every profile flattened with its apps + conditions. */
     fun profileRules(): Flow<List<ProfileRule>> =
-        combine(baseRules(), dao.observeAllUsageLimits()) { rules, limits ->
+        combine(baseRules(), dao.observeAllUsageLimits(), dao.observeAllWebsites()) { rules, limits, websites ->
             rules.map { rule ->
                 val mine = limits.filter { it.profileId == rule.id }
                 rule.copy(
@@ -48,6 +52,8 @@ class BlockerRepository @Inject constructor(
                     launchLimit = mine.find { it.limitType == LIMIT_LAUNCH }?.let {
                         LaunchLimitSpec(it.amount, period(it.periodDaily))
                     },
+                    websites = websites.filter { it.profileId == rule.id && it.enabled }
+                        .map { WebsiteRule(it.value, UrlMatchType.entries[it.matchType]) },
                 )
             }
         }
@@ -68,6 +74,7 @@ class BlockerRepository @Inject constructor(
                 apps = apps.filter { it.profileId == p.id && it.enabled }.map { it.packageName }.toSet(),
                 conditionsMask = p.conditionsMask,
                 dayFlags = p.dayFlags,
+                blockUnsupportedBrowsers = p.blockUnsupportedBrowsers,
                 timeWindows = intervals.filter { it.profileId == p.id }
                     .map { TimeWindow(it.fromMinuteOfDay, it.toMinuteOfDay) },
                 wifiSsids = wifi.filter { it.profileId == p.id }.map { it.ssid }.toSet(),
@@ -97,6 +104,7 @@ class BlockerRepository @Inject constructor(
     fun observeIntervals(profileId: Long): Flow<List<TimeIntervalEntity>> = dao.observeIntervals(profileId)
     fun observeWifi(profileId: Long): Flow<List<WifiNetworkEntity>> = dao.observeWifi(profileId)
     fun observeUsageLimits(profileId: Long): Flow<List<UsageLimitEntity>> = dao.observeUsageLimits(profileId)
+    fun observeWebsites(profileId: Long): Flow<List<WebsiteEntity>> = dao.observeWebsites(profileId)
 
     // --- per-profile mutations ---
     private suspend fun edit(profileId: Long, block: (ProfileEntity) -> ProfileEntity) {
@@ -153,6 +161,18 @@ class BlockerRepository @Inject constructor(
     )
 
     suspend fun removeGeo(id: Long) = dao.removeGeo(id)
+
+    // --- websites / keywords ---
+    suspend fun addWebsite(profileId: Long, rawValue: String, matchType: UrlMatchType) {
+        val value = UrlMatcher.normalize(rawValue, matchType)
+        if (value.isBlank()) return
+        dao.addWebsite(WebsiteEntity(profileId = profileId, value = value, matchType = matchType.ordinal))
+    }
+
+    suspend fun removeWebsite(id: Long) = dao.removeWebsite(id)
+
+    suspend fun setBlockUnsupportedBrowsers(profileId: Long, enabled: Boolean) =
+        edit(profileId) { it.copy(blockUnsupportedBrowsers = enabled) }
 
     suspend fun setUsageLimit(profileId: Long, minutes: Int, daily: Boolean) =
         dao.upsertUsageLimit(UsageLimitEntity(profileId = profileId, limitType = LIMIT_USAGE, amount = minutes, periodDaily = daily))
