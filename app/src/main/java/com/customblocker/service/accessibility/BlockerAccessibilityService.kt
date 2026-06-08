@@ -124,8 +124,8 @@ class BlockerAccessibilityService : AccessibilityService() {
                 if (strictConfig.enabled && strictConfig.level >= 3 && !unlockManager.unlocked.value &&
                     SettingsGuard.shouldBlock(pkg, event.className?.toString())
                 ) {
-                    L.d(L.ENGINE, "STRICT L3 block settings: $pkg/${event.className}")
-                    enforceBlock(BlockDecision.Block(pkg, "Settings blocked by Strict Mode"))
+                    L.d(L.ENGINE, "STRICT L3 block: $pkg/${event.className}")
+                    enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
                     return
                 }
                 if (pkg != lastForeground) {
