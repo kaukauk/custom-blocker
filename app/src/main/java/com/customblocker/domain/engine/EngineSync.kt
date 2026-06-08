@@ -1,6 +1,7 @@
 package com.customblocker.domain.engine
 
 import com.customblocker.data.repo.BlockerRepository
+import com.customblocker.service.conditions.TimeBoundaryScheduler
 import com.customblocker.util.L
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,7 @@ import javax.inject.Singleton
 class EngineSync @Inject constructor(
     private val repository: BlockerRepository,
     private val engine: BlockingEngine,
+    private val timeBoundaryScheduler: TimeBoundaryScheduler,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile private var started = false
@@ -30,6 +32,7 @@ class EngineSync @Inject constructor(
             repository.ensureDefaultProfile()
             repository.profileRules().distinctUntilChanged().collect { rules ->
                 engine.update(rules)
+                timeBoundaryScheduler.reschedule()
                 L.d(L.ENGINE, "rules updated: ${rules.size} profile(s); " +
                     rules.joinToString { "'${it.title}' enabled=${it.enabled} mask=${it.conditionsMask} apps=${it.apps.size} sites=${it.websites.size}" })
             }
