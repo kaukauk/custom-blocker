@@ -46,6 +46,24 @@ fun rememberPermissionState(): State<Pair<Boolean, Boolean>> {
     return state
 }
 
+/** Notification-listener access state, refreshed on every ON_RESUME. */
+@Composable
+fun rememberNotificationAccessState(): State<Boolean> {
+    val context = LocalContext.current
+    val owner = LocalLifecycleOwner.current
+    val state = remember { mutableStateOf(Permissions.isNotificationAccessGranted(context)) }
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                state.value = Permissions.isNotificationAccessGranted(context)
+            }
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    return state
+}
+
 /** Battery-optimization exemption state, refreshed on every ON_RESUME. */
 @Composable
 fun rememberBatteryExemptState(): State<Boolean> {

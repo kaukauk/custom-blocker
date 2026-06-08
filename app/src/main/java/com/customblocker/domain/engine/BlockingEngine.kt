@@ -51,17 +51,27 @@ class BlockingEngine @Inject constructor() {
         if (isNeverBlocked(packageName)) return BlockDecision.Allow
 
         for (rule in profiles) {
+            if (!rule.blockLaunch) continue
             if (!ConditionEvaluator.isActive(rule, ctx)) continue
-            val blocked = when (rule.mode) {
-                BlockingMode.BLOCKLIST -> packageName in rule.apps
-                BlockingMode.ALLOWLIST -> packageName !in rule.apps
-            }
-            if (blocked) {
+            if (rule.targets(packageName)) {
                 val how = if (rule.mode == BlockingMode.BLOCKLIST) "block list" else "allow list"
                 return BlockDecision.Block(packageName, "by \"${rule.title}\" ($how)")
             }
         }
         return BlockDecision.Allow
+    }
+
+    /**
+     * Whether notifications from [packageName] should be suppressed right now: any active profile
+     * that targets the package AND has notification-blocking enabled (PLAN.md §4). Independent of
+     * [decide]'s launch blocking, so a profile can suppress notifications without ejecting.
+     */
+    fun shouldBlockNotification(packageName: String?, ctx: BlockContext): Boolean {
+        if (packageName.isNullOrBlank()) return false
+        if (isNeverBlocked(packageName)) return false
+        return profiles.any { rule ->
+            rule.blockNotifications && rule.targets(packageName) && ConditionEvaluator.isActive(rule, ctx)
+        }
     }
 
     /**

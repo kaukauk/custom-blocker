@@ -11,8 +11,12 @@ import com.customblocker.data.prefs.StrictModeConfig
 import com.customblocker.data.prefs.StrictModeStore
 import com.customblocker.domain.engine.BlockDecision
 import com.customblocker.domain.engine.BlockingEngine
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import com.customblocker.domain.strict.UnlockManager
 import com.customblocker.service.conditions.ContextProvider
+import com.customblocker.service.conditions.TimeBoundaryScheduler
 import com.customblocker.service.conditions.UsageTracker
 import com.customblocker.service.monitoring.StatusNotification
 import com.customblocker.service.overlay.OverlayController
@@ -42,6 +46,17 @@ class BlockerAccessibilityService : AccessibilityService() {
     @Inject lateinit var usageTracker: UsageTracker
     @Inject lateinit var strictModeStore: StrictModeStore
     @Inject lateinit var unlockManager: UnlockManager
+    @Inject lateinit var timeBoundaryScheduler: TimeBoundaryScheduler
+
+    /** Fired by [TimeBoundaryScheduler] at a TIME window edge: re-evaluate now + reschedule. */
+    private val reevalReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: android.content.Intent?) {
+            L.d(L.COND, "time boundary reached — re-evaluating")
+            accrueUsage()
+            trackedPkg?.let { evaluate(it) }
+            timeBoundaryScheduler.reschedule()
+        }
+    }
 
     @Volatile private var strictConfig: StrictModeConfig = StrictModeConfig()
 
@@ -60,6 +75,11 @@ class BlockerAccessibilityService : AccessibilityService() {
         powerManager = getSystemService(PowerManager::class.java)
         engine.selfPackage = packageName   // never block ourselves (can't lock the user out)
         promoteToForeground()
+        registerReceiver(
+            reevalReceiver,
+            IntentFilter(TimeBoundaryScheduler.ACTION_REEVAL),
+            Context.RECEIVER_NOT_EXPORTED,
+        )
         L.d(L.FG, "accessibility service connected")
         // Keep the latest Strict Mode config for the L3 settings guard.
         scope.launch { strictModeStore.config.collect { strictConfig = it } }
@@ -104,8 +124,8 @@ class BlockerAccessibilityService : AccessibilityService() {
                 if (strictConfig.enabled && strictConfig.level >= 3 && !unlockManager.unlocked.value &&
                     SettingsGuard.shouldBlock(pkg, event.className?.toString())
                 ) {
-                    L.d(L.ENGINE, "STRICT L3 block settings: $pkg/${event.className}")
-                    enforceBlock(BlockDecision.Block(pkg, "Settings blocked by Strict Mode"))
+                    L.d(L.ENGINE, "STRICT L3 block: $pkg/${event.className}")
+                    enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
                     return
                 }
                 if (pkg != lastForeground) {
@@ -207,6 +227,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         super.onDestroy()
         scope.cancel()
         overlay.hide()
+        runCatching { unregisterReceiver(reevalReceiver) }
         L.w(L.FG, "accessibility service destroyed")
     }
 

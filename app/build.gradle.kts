@@ -22,7 +22,9 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
+            // `-PidExtra=N` yields a second installable package (com.customblocker.debugN) — used to
+            // verify the auto-block-new-apps receiver against a genuine package install.
+            applicationIdSuffix = ".debug" + (project.findProperty("idExtra") ?: "")
             isDebuggable = true
         }
         release {

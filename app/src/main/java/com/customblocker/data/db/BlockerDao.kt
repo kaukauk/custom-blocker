@@ -35,6 +35,9 @@ interface BlockerDao {
     @Query("DELETE FROM profiles WHERE id = :id")
     suspend fun deleteProfile(id: Long)
 
+    @Query("SELECT * FROM profiles WHERE addNewApps = 1 AND enabled = 1")
+    suspend fun getProfilesWithAddNewApps(): List<ProfileEntity>
+
     // --- apps ---
     @Query("SELECT * FROM profile_apps ORDER BY packageName")
     fun observeAllApps(): Flow<List<ProfileAppEntity>>

@@ -31,7 +31,12 @@ class BlockingEngineTest {
         fences: List<GeofenceSpec> = emptyList(),
         usage: UsageLimitSpec? = null,
         launch: LaunchLimitSpec? = null,
-    ) = ProfileRule(1, "Test", enabled, mode, apps, mask, dayFlags, windows, ssids, fences, usage, launch)
+        blockLaunch: Boolean = true,
+        blockNotifications: Boolean = false,
+    ) = ProfileRule(
+        1, "Test", enabled, mode, apps, mask, dayFlags, windows, ssids, fences, usage, launch,
+        blockLaunch = blockLaunch, blockNotifications = blockNotifications,
+    )
 
     private fun blocked(d: BlockDecision) = d is BlockDecision.Block
 
@@ -164,6 +169,23 @@ class BlockingEngineTest {
         assertEquals(BlockDecision.Allow, e.decide("com.customblocker", ctx(charging = true)))
         // a different unlisted app is still blocked while active
         assertTrue(blocked(e.decide(CHROME, ctx(charging = true))))
+    }
+
+    @Test fun blockLaunchOff_doesNotEject() {
+        val r = rule(blockLaunch = false)
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx()))
+    }
+
+    @Test fun notifications_suppressedOnlyWhenFlagAndActiveAndTargeted() {
+        val r = rule(mask = ConditionTypes.CHARGER, blockLaunch = false, blockNotifications = true)
+        val e = engine(r)
+        assertTrue(e.shouldBlockNotification(CHROME, ctx(charging = true)))      // targeted + active
+        assertEquals(false, e.shouldBlockNotification(CHROME, ctx(charging = false))) // inactive
+        assertEquals(false, e.shouldBlockNotification("com.other", ctx(charging = true))) // not targeted
+    }
+
+    @Test fun notifications_offByDefault() {
+        assertEquals(false, engine(rule()).shouldBlockNotification(CHROME, ctx()))
     }
 
     @Test fun allowsNullOrBlank() {
