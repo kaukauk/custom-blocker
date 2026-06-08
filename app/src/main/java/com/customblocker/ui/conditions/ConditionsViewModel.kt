@@ -3,6 +3,7 @@ package com.customblocker.ui.conditions
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.customblocker.data.db.GeoAddressEntity
 import com.customblocker.data.db.TimeIntervalEntity
 import com.customblocker.data.db.WifiNetworkEntity
 import com.customblocker.data.repo.BlockerRepository
@@ -20,6 +21,7 @@ data class ConditionsUiState(
     val dayFlags: Int = 127,
     val intervals: List<TimeIntervalEntity> = emptyList(),
     val wifi: List<WifiNetworkEntity> = emptyList(),
+    val geofences: List<GeoAddressEntity> = emptyList(),
     val usageMinutes: Int? = null,
     val usageDaily: Boolean = true,
     val launchCount: Int? = null,
@@ -39,7 +41,8 @@ class ConditionsViewModel @Inject constructor(
         repository.observeIntervals(profileId),
         repository.observeWifi(profileId),
         repository.observeUsageLimits(profileId),
-    ) { profile, intervals, wifi, limits ->
+        repository.observeGeo(profileId),
+    ) { profile, intervals, wifi, limits, geofences ->
         val usage = limits.find { it.limitType == BlockerRepository.LIMIT_USAGE }
         val launch = limits.find { it.limitType == BlockerRepository.LIMIT_LAUNCH }
         ConditionsUiState(
@@ -47,6 +50,7 @@ class ConditionsViewModel @Inject constructor(
             dayFlags = profile?.dayFlags ?: 127,
             intervals = intervals,
             wifi = wifi,
+            geofences = geofences,
             usageMinutes = usage?.amount,
             usageDaily = usage?.periodDaily ?: true,
             launchCount = launch?.amount,
@@ -71,6 +75,8 @@ class ConditionsViewModel @Inject constructor(
     }
 
     fun removeWifi(id: Long) = viewModelScope.launch { repository.removeWifi(id) }
+
+    fun removeGeo(id: Long) = viewModelScope.launch { repository.removeGeo(id) }
 
     fun toggleUsage(enabled: Boolean) = viewModelScope.launch {
         repository.setConditionEnabled(profileId, ConditionTypes.USAGE_LIMIT, enabled)

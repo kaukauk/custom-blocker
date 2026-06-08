@@ -21,6 +21,8 @@ class CustomBlockerApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // osmdroid needs a user-agent set before any tiles load, or tile servers 403.
+        org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         val entry = EntryPointAccessors.fromApplication(this, AppEntryPoint::class.java)
         // Start the live condition signals (wifi/charger) and stream DB rules into the engine.
         entry.signalsCoordinator().start()

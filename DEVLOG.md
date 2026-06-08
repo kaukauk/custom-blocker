@@ -13,6 +13,33 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ---
 
+## 2026-06-08 — Phase 3b: finish conditions (usage/launch limits, multi-profile, geofencing)
+
+**Branch:** `phase3b-conditions-finish` → merged to `master`. **State:** ✅ COMPLETE, verified.
+Done in three committed sub-steps:
+
+**3b-1 — usage-time + launch-count limits** (`f9b7456`): domain specs + evaluator (over-limit =
+condition met) + 3 unit tests (19 total); Room v3 `usage_limits`; `UsageTracker` (in-memory
+per-profile accumulators, hourly/daily resets) driven by the a11y service (usage timing on
+foreground change + launch count per open) plus a 3s ticker for mid-session enforcement;
+ContextProvider feeds counters into the engine; conditions UI sections. Verified: launch 5/day
+blocks on 5th open; usage 1-min accrues live (2,5,8,…) and blocks once cumulative ≥60s.
+*Counters are in-memory until Phase 5.*
+
+**3b-2 — multi-profile** (`b6f292f`): repo + ViewModels are profileId-scoped (SavedStateHandle nav
+arg); new `ProfileListScreen` home (enable/delete/create); `BlockListScreen` is the per-profile
+editor; routes carry `{profileId}`. Verified: 2nd profile "Focus" → engine logs 2 independent
+profiles.
+
+**3b-3 — real geofencing + map** (this commit): osmdroid map picker (keyless OSM tiles, tap-to-pin,
+radius slider, invert) → `addGeo` + auto-enables LOCATION; `GeofenceManager` registers real
+`GeofencingClient` geofences (re-synced via `SignalsCoordinator` on row changes);
+`GeofenceTransitionReceiver` updates `LiveSignals.insideGeofenceIds`; location perms +
+request flow. Verified: map renders OSM tiles; saving a pin → geo row + `Default` mask=24
+(usage∧location) + log `geofences registered: [geo_1_…]`. Engine inside/outside/inverted logic was
+already unit-tested + harness-proven in Phase 3; real GPS-transition firing needs emulator
+mock-location (best-effort, not hardware-verified here).
+
 ## 2026-06-08 — Phase 3: conditions engine (time / wifi / charger / location)
 
 **Branch:** `phase3-conditions` → merged to `master`. **State:** ✅ COMPLETE, verified on emulator.

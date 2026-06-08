@@ -91,6 +91,9 @@ interface BlockerDao {
     @Query("SELECT * FROM geo_addresses")
     fun observeAllGeo(): Flow<List<GeoAddressEntity>>
 
+    @Query("SELECT * FROM geo_addresses WHERE profileId = :profileId")
+    fun observeGeo(profileId: Long): Flow<List<GeoAddressEntity>>
+
     @Insert
     suspend fun addGeo(geo: GeoAddressEntity)
 

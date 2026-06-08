@@ -1,6 +1,7 @@
 package com.customblocker.data.repo
 
 import com.customblocker.data.db.BlockerDao
+import com.customblocker.data.db.GeoAddressEntity
 import com.customblocker.data.db.ProfileAppEntity
 import com.customblocker.data.db.ProfileEntity
 import com.customblocker.data.db.TimeIntervalEntity
@@ -127,6 +128,31 @@ class BlockerRepository @Inject constructor(
         dao.addWifi(WifiNetworkEntity(profileId = profileId, ssid = ssid))
 
     suspend fun removeWifi(id: Long) = dao.removeWifi(id)
+
+    // --- geofences ---
+    fun observeAllGeo(): Flow<List<GeoAddressEntity>> = dao.observeAllGeo()
+    fun observeGeo(profileId: Long): Flow<List<GeoAddressEntity>> = dao.observeGeo(profileId)
+
+    suspend fun addGeo(
+        profileId: Long,
+        latitude: Double,
+        longitude: Double,
+        radiusMeters: Float,
+        inverted: Boolean,
+        label: String?,
+    ) = dao.addGeo(
+        GeoAddressEntity(
+            profileId = profileId,
+            geofenceId = "geo_${profileId}_${System.currentTimeMillis()}",
+            latitude = latitude,
+            longitude = longitude,
+            radiusMeters = radiusMeters,
+            inverted = inverted,
+            label = label,
+        ),
+    )
+
+    suspend fun removeGeo(id: Long) = dao.removeGeo(id)
 
     suspend fun setUsageLimit(profileId: Long, minutes: Int, daily: Boolean) =
         dao.upsertUsageLimit(UsageLimitEntity(profileId = profileId, limitType = LIMIT_USAGE, amount = minutes, periodDaily = daily))

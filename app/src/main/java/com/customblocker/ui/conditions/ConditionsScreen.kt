@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -58,6 +59,7 @@ private fun hhmm(minuteOfDay: Int): String = "%02d:%02d".format(minuteOfDay / 60
 @Composable
 fun ConditionsScreen(
     onBack: () -> Unit,
+    onAddLocation: () -> Unit,
     viewModel: ConditionsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -166,6 +168,38 @@ fun ConditionsScreen(
                         )
                         Button(onClick = { viewModel.addWifi(newSsid); newSsid = "" }) { Text("Add") }
                     }
+                }
+            }
+
+            // --- LOCATION ---
+            item {
+                SectionHeader(
+                    title = "Location",
+                    enabled = mask and ConditionTypes.LOCATION != 0,
+                    onToggle = { viewModel.setConditionEnabled(ConditionTypes.LOCATION, it) },
+                )
+            }
+            if (mask and ConditionTypes.LOCATION != 0) {
+                items(state.geofences, key = { it.id }) { geo ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "%.4f, %.4f · %dm%s".format(
+                                geo.latitude, geo.longitude, geo.radiusMeters.toInt(),
+                                if (geo.inverted) " (outside)" else "",
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        IconButton(onClick = { viewModel.removeGeo(geo.id) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove location")
+                        }
+                    }
+                }
+                item {
+                    OutlinedButton(onClick = onAddLocation) { Text("Add location") }
                 }
             }
 

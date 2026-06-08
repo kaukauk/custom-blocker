@@ -11,6 +11,8 @@ import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import com.customblocker.util.L
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -85,12 +87,24 @@ class WifiMonitor @Inject constructor(
 class SignalsCoordinator @Inject constructor(
     private val chargerMonitor: ChargerMonitor,
     private val wifiMonitor: WifiMonitor,
+    private val geofenceManager: GeofenceManager,
+    private val repository: com.customblocker.data.repo.BlockerRepository,
 ) {
+    private val scope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default,
+    )
     @Volatile private var started = false
+
     fun start() {
         if (started) return
         started = true
         chargerMonitor.start()
         wifiMonitor.start()
+        // Re-register OS geofences whenever the geofence rows change.
+        scope.launch {
+            repository.observeAllGeo()
+                .distinctUntilChanged()
+                .collect { geofenceManager.sync(it) }
+        }
     }
 }
