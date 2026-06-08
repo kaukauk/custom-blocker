@@ -1,0 +1,28 @@
+package com.customblocker.ui.strict
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.customblocker.data.prefs.StrictModeConfig
+import com.customblocker.data.prefs.StrictModeStore
+import com.customblocker.data.prefs.UnlockGate
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+@HiltViewModel
+class StrictModeViewModel @Inject constructor(
+    private val store: StrictModeStore,
+) : ViewModel() {
+
+    val config: StateFlow<StrictModeConfig> =
+        store.config.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StrictModeConfig())
+
+    fun setEnabled(enabled: Boolean) = viewModelScope.launch { store.setEnabled(enabled) }
+    fun setLevel(level: Int) = viewModelScope.launch { store.setLevel(level) }
+    fun setGate(gate: UnlockGate) = viewModelScope.launch { store.setGate(gate) }
+    fun setTimerMinutes(minutes: Int) = viewModelScope.launch { store.setTimerMinutes(minutes) }
+    fun setPin(pin: String) = viewModelScope.launch { store.setPin(pin) }
+}
