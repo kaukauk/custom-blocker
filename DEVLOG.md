@@ -13,6 +13,51 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ---
 
+## 2026-06-08 — Deferred-items sweep (Phase 4–6 follow-ups)
+
+**Branch:** `deferred-items` → merged to `master` (`4fa5dfe`). **State:** ✅ COMPLETE, all verified.
+Picked up every previously-deferred item.
+
+**D-1 per-profile behavior flags** (`fef49c2`): Room **v6** adds `blockLaunch` (default true),
+`blockNotifications`, `addNewApps` to ProfileEntity. `ProfileRule.targets()` extracted; `decide`
+respects `blockLaunch` (a profile can be notifications-only); new `shouldBlockNotification(pkg,ctx)`.
+Editor gains a "Behavior" section with the 3 toggles (lock-gated). 3 engine unit tests.
+
+**D-2 block notifications** (`0d8362d`): `BlockerNotificationListener` (NotificationListenerService)
+cancels notifications from targeted apps when an active profile has `blockNotifications` on. Onboarding:
+`Permissions.isNotificationAccessGranted` + a "Grant notification access" button in the editor.
+*Verified:* a posted notification from a targeted package was suppressed + removed from the shade.
+
+**D-3 auto-block new apps** (`0dfc7e1`): `PackageAddedReceiver` adds fresh launchable installs to
+`addNewApps` profiles. KEY GOTCHA: **ACTION_PACKAGE_ADDED is NOT exempt from the O+ manifest
+implicit-broadcast ban** — a manifest receiver never fires (confirmed: GMS etc. got it, ours didn't).
+Fixed by **registering at runtime** from the Application (process kept alive by the FGS),
+RECEIVER_NOT_EXPORTED. Build hook `-PidExtra=N` builds a second package to test real installs.
+*Verified:* installing a fresh package auto-added it to the flagged profile.
+
+**D-4 watchdog** (`9770280`): hourly `WatchdogWorker` (WorkManager) posts a "Blocking is paused"
+notification if accessibility is disabled, clears it when healthy. *Verified:* with a11y off the
+worker logged the detection + fired the alert. (Can't re-enable a11y programmatically — prompting is
+the best option.)
+
+**D-5 time-boundary alarms** (`6ccc130`): `TimeBoundaryScheduler` sets a `setAndAllowWhileIdle`
+wake-up at the next TIME-window edge; on fire the a11y service re-evaluates + reschedules. Wired from
+EngineSync on rule changes. *Verified:* alarm registered at the correct boundary; on fire logged
+"time boundary reached — re-evaluating" + rescheduled. (Honest: marginal value — the 3s ticker
+already covers the interactive case; while-idle alarms are rate-limited ~9–15 min so short test
+boundaries get deferred. Real boundaries are far apart.)
+
+**D-6 L3 anti-tamper +installer** (`1af7eec`): extended the L3 guard to block the package installer /
+permission UI (com.android.packageinstaller, com.google.android.packageinstaller,
+com.android.permissioncontroller). *Verified:* uninstall dialog ejected under L3+locked.
+
+**Explicitly NOT chased (with rationale):** (a) L3 Settings sub-screen whitelist — leaks via generic
+a11y classNames (proven in Phase 6). (b) Recents/notification-shade anti-tamper — those are
+systemui/launcher (never-block; soft-brick risk), and swiping from Recents doesn't stop the system-
+bound a11y service, so it's not a real bypass vector; the force-stop it reaches is in Settings,
+already blocked. (c) Per-profile "active tie-in" for L1 — that would *weaken* L1 (currently locks
+whenever strict is enabled), so left as-is.
+
 ## 2026-06-08 — Phase 6: Strict Mode (Pixel/AOSP)
 
 **Branch:** `phase6-strict-mode` → merged to `master` (`44d520c`). **State:** ✅ COMPLETE, verified.
