@@ -13,6 +13,35 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ---
 
+## 2026-06-08 — Phase 1: core blocking engine MVP
+
+**Branch:** `phase1-core-engine` → merged to `main`. **State:** ✅ COMPLETE, verified on emulator.
+
+Built the two pillars + a pure decision core:
+- `domain/engine/BlockingEngine` — pure Kotlin, JVM-unit-tested (`BlockingEngineTest`, 5 tests
+  green). `decide(pkg) -> Block/Allow`. Phase-1 block set is a settable `blockedPackages`
+  (seeded with `com.android.chrome`); has a `neverBlock` guard for systemui/launchers. Phase 2
+  swaps the set for a DB snapshot; the `decide` contract stays.
+- `service/accessibility/BlockerAccessibilityService` — `@AndroidEntryPoint`; on
+  `TYPE_WINDOW_STATE_CHANGED` resolves the foreground pkg, calls the engine, and on Block shows
+  the overlay + ejects (`GLOBAL_ACTION_HOME` + HOME intent). Self-package + dup-package filtered.
+- `service/overlay/OverlayController` — `TYPE_APPLICATION_OVERLAY`, MATCH_PARENT, NOT_FOCUSABLE,
+  programmatic dark block View with a Close button. (Compose-in-overlay deferred to polish.)
+- `ui/onboarding/` — Compose permission gate (accessibility + overlay) with ON_RESUME refresh +
+  Settings deep-links. Manifest: SYSTEM_ALERT_WINDOW, QUERY_ALL_PACKAGES, the a11y service +
+  `res/xml/accessibility_service_config.xml`.
+
+Verified (CLI, no manual taps): granted overlay via `appops`, enabled a11y via
+`settings put secure enabled_accessibility_services …`, launched Chrome →
+`FgDetect: foreground=com.android.chrome` → `BlockEngine: BLOCK … in block list` →
+`Overlay: shown` → foreground became launcher (ejected); overlay window present in
+`dumpsys window`; block screen screenshot confirmed. Exit criterion met.
+
+Gotcha: `google_apis` image *does* include `com.android.chrome` (good — our canonical target).
+
+Next (Phase 2, new branch): Room schema + repositories + app/website/keyword pickers +
+block/allow-list UI; engine reads a DB-backed snapshot via Flow instead of the hardcoded set.
+
 ## 2026-06-08 — Phase 0: environment + scaffold
 
 **State:** ✅ COMPLETE. App builds, installs, and launches on the Pixel 4 XL emulator
