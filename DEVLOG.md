@@ -15,7 +15,17 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ## 2026-06-08 — Phase 0: environment + scaffold
 
-**State:** in progress. Goal = SDK + Pixel 4 XL emulator + a Compose skeleton that builds & runs.
+**State:** ✅ COMPLETE. App builds, installs, and launches on the Pixel 4 XL emulator
+(`emulator-5554`); Compose home screen renders with Material3 dynamic theme. Exit criterion met.
+
+Gotchas hit & fixed:
+- `ksp.useKSP2=true` broke Hilt 2.52 annotation processing (`kspDebugKotlin` →
+  `PROCESSING_ERROR`). Removed the flag → KSP1 path → green build. Keep KSP2 off until Hilt
+  officially supports it.
+- Two adb devices attached (physical Pixel + emulator). Always target the emulator via
+  `ANDROID_SERIAL`/`adb -e` (handled in `scripts/dev.sh`).
+
+Goal = SDK + Pixel 4 XL emulator + a Compose skeleton that builds & runs.
 
 Done:
 - Surveyed the observable behavior of existing blockers and wrote the full `PLAN.md` (8 phases).

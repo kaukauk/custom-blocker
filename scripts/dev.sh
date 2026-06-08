@@ -14,6 +14,13 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.config/.android/avd}"
 export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 
+# Target the emulator specifically — the user's physical Pixel may also be attached.
+# Gradle installDebug and all adb calls honour ANDROID_SERIAL.
+if [ -z "${ANDROID_SERIAL:-}" ]; then
+  _emu="$(adb devices 2>/dev/null | awk '/emulator-/{print $1; exit}')"
+  [ -n "$_emu" ] && export ANDROID_SERIAL="$_emu"
+fi
+
 AVD_NAME="pixel4xl_api35"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 APP_ID="com.customblocker.debug"
