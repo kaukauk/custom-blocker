@@ -13,6 +13,44 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ---
 
+## 2026-06-08 — Phase 4: website & keyword blocking
+
+**Branch:** `phase4-websites` → merged to `master` (`fce75e2`). **State:** ✅ COMPLETE, verified.
+Done in three committed sub-steps:
+
+**4-1 — engine + schema** (`0dfcfb1`): pure `domain/engine/WebsiteRules.kt` — `UrlMatchType`
+(DOMAIN matches host + subdomains, KEYWORD = substring anywhere, EXACT = whole URL scheme-
+insensitive), `UrlMatcher.host()` best-effort host extraction (strips scheme/www/userinfo/path,
+rejects search queries with spaces or no dot) + `normalize()`; `WebsiteRule` on `ProfileRule`;
+`BlockingEngine.decideUrl(pkg, url, ctx)` (any active profile with a matching site blocks; unreadable
+URL + `blockUnsupportedBrowsers` blocks the whole browser). Room **v4**: `profile_websites`
+(profileId, value, matchType, enabled; unique profileId+value+matchType) + `profiles
+.blockUnsupportedBrowsers`. Repo folds websites into the `profileRules` flow (3-arg 2nd-level
+combine alongside usage limits). 17 JVM tests (matching + decideUrl + guards).
+
+**4-2 — read browser URL bar** (`ead4c0b`): `BrowserUrlReader` maps ~13 known browsers
+(chrome/beta/dev, brave, firefox, focus, edge, opera/mini, duckduckgo, samsung, vivaldi, kiwi) to
+their URL-bar view id and reads text via `findAccessibilityNodeInfosByViewId`. Service now also
+handles `TYPE_WINDOW_CONTENT_CHANGED` for browsers (deduped by `lastUrl`), calls `decideUrl` →
+shared `enforceBlock` (overlay + HOME eject). New `UrlDetect` log tag. `evaluate()` returns Boolean
+(blocked app skips URL read).
+
+**4-3 — picker UI** (`40cc171`): `ui/websites/WebsiteScreen` + `WebsiteViewModel` — match-type
+chips (Domain/Keyword/Exact), add/list/remove, **block-unsupported-browsers** toggle. Entry button
+in the profile editor; `websites/{profileId}` route in AppNav.
+
+**Verified on emulator** (real device, not unit-only): seeded `youtube.com` DOMAIN → browsing to
+`m.youtube.com` in Chrome logged `UrlDetect: BLOCK … site "youtube.com"`, showed overlay, ejected to
+launcher; `example.com` logged `allow`, stayed in Chrome (no over-block). Drove the UI end-to-end:
+profile editor → Websites & keywords → selected Keyword → typed "casino" → Add → "Blocked (2)" +
+engine reload `sites=2`. Chrome gotchas: dismiss first-run via `--disable-fre` cmdline + tap the
+"No thanks" notification modal; force-stop drops the a11y binding so re-set
+`enabled_accessibility_services` after reinstall.
+
+**Notes / deferred:** Other Phase-4 roadmap items NOT done yet — per-profile block-launch &
+block-notifications (NotificationListenerService), auto-block newly-installed apps. Browser
+view-id map is hardcoded (a DB table would allow updates without an app release); fine for v1.
+
 ## 2026-06-08 — Phase 3b: finish conditions (usage/launch limits, multi-profile, geofencing)
 
 **Branch:** `phase3b-conditions-finish` → merged to `master`. **State:** ✅ COMPLETE, verified.
