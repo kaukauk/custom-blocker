@@ -5,6 +5,7 @@ import com.customblocker.data.db.GeoAddressEntity
 import com.customblocker.data.db.ProfileAppEntity
 import com.customblocker.data.db.ProfileEntity
 import com.customblocker.data.db.TimeIntervalEntity
+import com.customblocker.data.db.UsageCounterEntity
 import com.customblocker.data.db.UsageLimitEntity
 import com.customblocker.data.db.WebsiteEntity
 import com.customblocker.data.db.WifiNetworkEntity
@@ -173,6 +174,19 @@ class BlockerRepository @Inject constructor(
 
     suspend fun setBlockUnsupportedBrowsers(profileId: Long, enabled: Boolean) =
         edit(profileId) { it.copy(blockUnsupportedBrowsers = enabled) }
+
+    // --- persisted usage counters (Phase 5 reliability) ---
+    suspend fun loadUsageCounters(): List<UsageCounterEntity> = dao.getAllUsageCounters()
+
+    suspend fun saveUsageCounter(
+        profileId: Long,
+        usedSeconds: Int,
+        launches: Int,
+        usagePeriodKey: Long,
+        launchPeriodKey: Long,
+    ) = dao.upsertUsageCounter(
+        UsageCounterEntity(profileId, usedSeconds, launches, usagePeriodKey, launchPeriodKey),
+    )
 
     suspend fun setUsageLimit(profileId: Long, minutes: Int, daily: Boolean) =
         dao.upsertUsageLimit(UsageLimitEntity(profileId = profileId, limitType = LIMIT_USAGE, amount = minutes, periodDaily = daily))

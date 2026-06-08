@@ -84,6 +84,26 @@ data class UsageLimitEntity(
     val periodDaily: Boolean = true,
 )
 
+/**
+ * Runtime usage/launch counters, persisted so a daily/hourly limit survives process death and
+ * reboot (PLAN.md §12). [usagePeriodKey]/[launchPeriodKey] are the epoch-day (daily) or epoch-hour
+ * (hourly) the counter belongs to; on load, a stale key means the period rolled over → reset to 0.
+ */
+@Entity(
+    tableName = "usage_counters",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index(value = ["profileId"], unique = true)],
+)
+data class UsageCounterEntity(
+    @PrimaryKey val profileId: Long,
+    val usedSeconds: Int = 0,
+    val launches: Int = 0,
+    val usagePeriodKey: Long = 0,
+    val launchPeriodKey: Long = 0,
+)
+
 @Entity(
     tableName = "profile_websites",
     foreignKeys = [
