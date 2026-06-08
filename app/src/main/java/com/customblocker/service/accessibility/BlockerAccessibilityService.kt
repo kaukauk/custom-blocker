@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import com.customblocker.data.prefs.StrictModeConfig
 import com.customblocker.data.prefs.StrictModeStore
+import com.customblocker.data.stats.StatsRecorder
 import com.customblocker.domain.engine.BlockDecision
 import com.customblocker.domain.engine.BlockingEngine
 import android.content.BroadcastReceiver
@@ -47,6 +48,7 @@ class BlockerAccessibilityService : AccessibilityService() {
     @Inject lateinit var strictModeStore: StrictModeStore
     @Inject lateinit var unlockManager: UnlockManager
     @Inject lateinit var timeBoundaryScheduler: TimeBoundaryScheduler
+    @Inject lateinit var statsRecorder: StatsRecorder
 
     /** Fired by [TimeBoundaryScheduler] at a TIME window edge: re-evaluate now + reschedule. */
     private val reevalReceiver = object : BroadcastReceiver() {
@@ -69,6 +71,8 @@ class BlockerAccessibilityService : AccessibilityService() {
     private var sinceMs: Long = 0
     /** Last URL we evaluated, to skip re-evaluating unchanged content-changed spam. */
     private var lastUrl: String? = null
+    /** Package we last recorded a block for, to avoid re-counting the 3s ticker re-evaluations. */
+    private var lastBlockedPkg: String? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -131,6 +135,7 @@ class BlockerAccessibilityService : AccessibilityService() {
                 if (pkg != lastForeground) {
                     lastForeground = pkg
                     lastUrl = null
+                    lastBlockedPkg = null         // new foreground entry → a fresh block can count
 
                     accrueUsage()                 // finalize the previous app's foreground time
                     trackedPkg = pkg
@@ -169,6 +174,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         val seconds = ((now - sinceMs) / 1000L).toInt()
         if (seconds > 0) {
             usageTracker.addUsage(pkg, seconds)
+            statsRecorder.recordUsage(pkg, seconds)
             sinceMs = now
         }
     }
@@ -186,6 +192,11 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
     private fun enforceBlock(decision: BlockDecision.Block) {
+        // Count each block once per foreground entry, not on every 3s ticker re-evaluation.
+        if (decision.packageName != lastBlockedPkg) {
+            statsRecorder.recordBlock(decision.packageName)
+            lastBlockedPkg = decision.packageName
+        }
         overlay.show(appLabel = decision.packageName, reason = decision.reason)
         performGlobalAction(GLOBAL_ACTION_HOME)
         startActivity(
