@@ -13,6 +13,53 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ---
 
+## 2026-06-08 — Lock-out fix (between Phase 4 and 5)
+
+**Commit `36588eb` on `master`.** User testing surfaced a real lock-out: in **allow-list** mode the
+profile blocked everything not listed — including our own app — and the 3s mid-session ticker kept
+re-evaluating a *stale* `trackedPkg` and ejecting to home every tick, trapping the user.
+- `BlockingEngine.selfPackage` (set from the a11y service's `packageName`) is never blocked in any
+  mode (both `decide` + `decideUrl`).
+- When our own **UI Activity** comes foreground: hide overlay, finalize usage, clear `trackedPkg`
+  (ticker can't eject while editing). Gated on an Activity className — our **overlay window** also
+  fires a window-state event under our package, and acting on it would hide the block screen we just
+  raised (caused a 0.2s overlay flash; fixed). Verified: allow-list no longer ejects from our app;
+  block screen now persists over the launcher until dismissed.
+
+## 2026-06-08 — Phase 5: persistence & reliability
+
+**Branch:** `phase5-reliability` → merged to `master` (`2e9e738`). **State:** ✅ COMPLETE, verified.
+
+**Baseline first:** rebooted the AVD with an active profile — the system auto-rebinds the
+accessibility service, which starts the process → `Application.onCreate` → `EngineSync`/
+`SignalsCoordinator` (re-registers geofences) → engine reloads rules → youtube blocked + ejected.
+So the PLAN exit criterion ("reboot → blocking resumes") already passes without extra infra. Phase 5
+therefore targets the *non-automatic* durability gaps:
+
+**5-2 — persist usage/launch counters** (`4f443b2`): Room **v5** `usage_counters` (profileId,
+usedSeconds, launches, usagePeriodKey, launchPeriodKey). `UsageTracker` writes through on each
+change and `load()`s on startup (from the Application); a counter whose stored period key has rolled
+over resets to 0. Verified: seeded an over-limit counter with today's key → Chrome blocked on first
+launch after restart; stale (yesterday) key → reset to 0, not blocked.
+
+**5-1 — foreground service** (`afa47e3`): promoted the **already-bound accessibility service** to a
+foreground service (specialUse) with a persistent "blocker active" notification (`StatusNotification`)
+— rather than a separate monitoring service, which would hit Android 12+ background-FGS-start limits.
+Raises process priority (resists low-memory kills), ties the notification to the real worker, and
+needs no boot receiver: the a11y service auto-rebinds on boot and self-promotes. Manifest:
+FOREGROUND_SERVICE(+SPECIAL_USE), POST_NOTIFICATIONS, RECEIVE_BOOT_COMPLETED, foregroundServiceType=
+specialUse + PROPERTY_SPECIAL_USE_FGS_SUBTYPE. Best-effort try/catch. Verified on API 35:
+`isForeground=true types=0x40000000`; after reboot the FGS re-promotes automatically.
+
+**5-3 — battery-exemption onboarding** (`72dd174`): a soft home-screen `ReliabilityBanner` (not a
+hard gate) checks `PowerManager.isIgnoringBatteryOptimizations` and opens the system exemption
+dialog; hidden once granted. Verified the full round-trip on the emulator.
+
+**Decisions:** separate BootReceiver/MonitoringService omitted as redundant (a11y auto-resume covers
+it). Time-boundary alarms not added — the 3s ticker already re-evaluates the foreground app, catching
+window start/end within 3s while interactive; waking from idle to *start* a block is a later refinement.
+Watchdog (WorkManager revive of a11y) deferred — the system rebinds reliably on this target.
+
 ## 2026-06-08 — Phase 4: website & keyword blocking
 
 **Branch:** `phase4-websites` → merged to `master` (`fce75e2`). **State:** ✅ COMPLETE, verified.
