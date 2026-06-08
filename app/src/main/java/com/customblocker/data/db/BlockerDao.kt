@@ -26,6 +26,15 @@ interface BlockerDao {
     @Query("SELECT * FROM profiles ORDER BY id")
     fun observeAllProfiles(): Flow<List<ProfileEntity>>
 
+    @Query("SELECT * FROM profiles WHERE id = :id")
+    fun observeProfile(id: Long): Flow<ProfileEntity?>
+
+    @Query("SELECT * FROM profiles WHERE id = :id")
+    suspend fun getProfile(id: Long): ProfileEntity?
+
+    @Query("DELETE FROM profiles WHERE id = :id")
+    suspend fun deleteProfile(id: Long)
+
     // --- apps ---
     @Query("SELECT * FROM profile_apps ORDER BY packageName")
     fun observeAllApps(): Flow<List<ProfileAppEntity>>

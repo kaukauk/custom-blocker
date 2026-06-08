@@ -1,5 +1,6 @@
 package com.customblocker.ui.blocklist
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.customblocker.data.repo.BlockerRepository
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class BlockListUiState(
+    val title: String = "",
     val enabled: Boolean = false,
     val mode: BlockingMode = BlockingMode.BLOCKLIST,
     val apps: List<InstalledApp> = emptyList(),
@@ -24,18 +26,22 @@ data class BlockListUiState(
 class BlockListViewModel @Inject constructor(
     private val repository: BlockerRepository,
     private val lister: AppLister,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
+    val profileId: Long = savedStateHandle.get<Long>("profileId") ?: 0L
+
     val state: StateFlow<BlockListUiState> =
-        combine(repository.observeProfile(), repository.observeApps()) { profile, apps ->
+        combine(repository.observeProfile(profileId), repository.observeApps(profileId)) { profile, apps ->
             BlockListUiState(
+                title = profile?.title ?: "",
                 enabled = profile?.enabled ?: false,
                 mode = if (profile?.blockingMode == 1) BlockingMode.ALLOWLIST else BlockingMode.BLOCKLIST,
                 apps = apps.map { InstalledApp(it.packageName, lister.label(it.packageName)) },
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BlockListUiState())
 
-    fun setEnabled(enabled: Boolean) = viewModelScope.launch { repository.setEnabled(enabled) }
-    fun setMode(mode: BlockingMode) = viewModelScope.launch { repository.setMode(mode) }
-    fun removeApp(packageName: String) = viewModelScope.launch { repository.removeApp(packageName) }
+    fun setEnabled(enabled: Boolean) = viewModelScope.launch { repository.setEnabled(profileId, enabled) }
+    fun setMode(mode: BlockingMode) = viewModelScope.launch { repository.setMode(profileId, mode) }
+    fun removeApp(packageName: String) = viewModelScope.launch { repository.removeApp(profileId, packageName) }
 }

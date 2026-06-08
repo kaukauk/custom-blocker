@@ -78,74 +78,65 @@ class BlockerRepository @Inject constructor(
 
     private fun period(daily: Boolean) = if (daily) LimitPeriod.DAILY else LimitPeriod.HOURLY
 
-    // --- default-profile observers for the UI ---
-    fun observeProfile(): Flow<ProfileEntity?> = dao.observeFirstProfile()
+    // --- profile list / lifecycle ---
+    fun observeProfiles(): Flow<List<ProfileEntity>> = dao.observeAllProfiles()
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeApps(): Flow<List<ProfileAppEntity>> =
-        dao.observeFirstProfile().flatMapLatest { p ->
-            if (p == null) flowOf(emptyList()) else dao.observeApps(p.id)
-        }
+    suspend fun createProfile(title: String): Long =
+        dao.insertProfile(ProfileEntity(title = title.ifBlank { "Profile" }, enabled = true, blockingMode = 0))
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeIntervals(): Flow<List<TimeIntervalEntity>> =
-        dao.observeFirstProfile().flatMapLatest { p ->
-            if (p == null) flowOf(emptyList()) else dao.observeIntervals(p.id)
-        }
+    suspend fun deleteProfile(id: Long) = dao.deleteProfile(id)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeWifi(): Flow<List<WifiNetworkEntity>> =
-        dao.observeFirstProfile().flatMapLatest { p ->
-            if (p == null) flowOf(emptyList()) else dao.observeWifi(p.id)
-        }
-
-    // --- mutations on the default profile ---
-    private suspend fun profile(): ProfileEntity =
-        dao.getFirstProfile() ?: ProfileEntity(id = ensureDefaultProfile(), title = "Default")
-
-    suspend fun addApp(packageName: String) =
-        dao.addApp(ProfileAppEntity(profileId = ensureDefaultProfile(), packageName = packageName))
-
-    suspend fun removeApp(packageName: String) = dao.removeApp(ensureDefaultProfile(), packageName)
-
-    suspend fun setEnabled(enabled: Boolean) = dao.updateProfile(profile().copy(enabled = enabled))
-
-    suspend fun setMode(mode: BlockingMode) =
-        dao.updateProfile(profile().copy(blockingMode = if (mode == BlockingMode.ALLOWLIST) 1 else 0))
-
-    suspend fun setConditionEnabled(conditionBit: Int, enabled: Boolean) {
-        val p = profile()
-        val mask = if (enabled) p.conditionsMask or conditionBit else p.conditionsMask and conditionBit.inv()
-        dao.updateProfile(p.copy(conditionsMask = mask))
+    suspend fun renameProfile(id: Long, title: String) {
+        dao.getProfile(id)?.let { dao.updateProfile(it.copy(title = title.ifBlank { it.title })) }
     }
 
-    suspend fun setDayFlags(dayFlags: Int) = dao.updateProfile(profile().copy(dayFlags = dayFlags))
+    // --- per-profile observers for the UI ---
+    fun observeProfile(profileId: Long): Flow<ProfileEntity?> = dao.observeProfile(profileId)
+    fun observeApps(profileId: Long): Flow<List<ProfileAppEntity>> = dao.observeApps(profileId)
+    fun observeIntervals(profileId: Long): Flow<List<TimeIntervalEntity>> = dao.observeIntervals(profileId)
+    fun observeWifi(profileId: Long): Flow<List<WifiNetworkEntity>> = dao.observeWifi(profileId)
+    fun observeUsageLimits(profileId: Long): Flow<List<UsageLimitEntity>> = dao.observeUsageLimits(profileId)
 
-    suspend fun addTimeWindow(fromMinuteOfDay: Int, toMinuteOfDay: Int) =
-        dao.addInterval(TimeIntervalEntity(profileId = ensureDefaultProfile(), fromMinuteOfDay = fromMinuteOfDay, toMinuteOfDay = toMinuteOfDay))
+    // --- per-profile mutations ---
+    private suspend fun edit(profileId: Long, block: (ProfileEntity) -> ProfileEntity) {
+        dao.getProfile(profileId)?.let { dao.updateProfile(block(it)) }
+    }
+
+    suspend fun addApp(profileId: Long, packageName: String) =
+        dao.addApp(ProfileAppEntity(profileId = profileId, packageName = packageName))
+
+    suspend fun removeApp(profileId: Long, packageName: String) = dao.removeApp(profileId, packageName)
+
+    suspend fun setEnabled(profileId: Long, enabled: Boolean) = edit(profileId) { it.copy(enabled = enabled) }
+
+    suspend fun setMode(profileId: Long, mode: BlockingMode) =
+        edit(profileId) { it.copy(blockingMode = if (mode == BlockingMode.ALLOWLIST) 1 else 0) }
+
+    suspend fun setConditionEnabled(profileId: Long, conditionBit: Int, enabled: Boolean) = edit(profileId) {
+        it.copy(conditionsMask = if (enabled) it.conditionsMask or conditionBit else it.conditionsMask and conditionBit.inv())
+    }
+
+    suspend fun setDayFlags(profileId: Long, dayFlags: Int) = edit(profileId) { it.copy(dayFlags = dayFlags) }
+
+    suspend fun addTimeWindow(profileId: Long, fromMinuteOfDay: Int, toMinuteOfDay: Int) =
+        dao.addInterval(TimeIntervalEntity(profileId = profileId, fromMinuteOfDay = fromMinuteOfDay, toMinuteOfDay = toMinuteOfDay))
 
     suspend fun removeInterval(id: Long) = dao.removeInterval(id)
 
-    suspend fun addWifi(ssid: String) =
-        dao.addWifi(WifiNetworkEntity(profileId = ensureDefaultProfile(), ssid = ssid))
+    suspend fun addWifi(profileId: Long, ssid: String) =
+        dao.addWifi(WifiNetworkEntity(profileId = profileId, ssid = ssid))
 
     suspend fun removeWifi(id: Long) = dao.removeWifi(id)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeUsageLimits(): Flow<List<UsageLimitEntity>> =
-        dao.observeFirstProfile().flatMapLatest { p ->
-            if (p == null) flowOf(emptyList()) else dao.observeUsageLimits(p.id)
-        }
+    suspend fun setUsageLimit(profileId: Long, minutes: Int, daily: Boolean) =
+        dao.upsertUsageLimit(UsageLimitEntity(profileId = profileId, limitType = LIMIT_USAGE, amount = minutes, periodDaily = daily))
 
-    suspend fun setUsageLimit(minutes: Int, daily: Boolean) =
-        dao.upsertUsageLimit(UsageLimitEntity(profileId = ensureDefaultProfile(), limitType = LIMIT_USAGE, amount = minutes, periodDaily = daily))
+    suspend fun clearUsageLimit(profileId: Long) = dao.removeUsageLimit(profileId, LIMIT_USAGE)
 
-    suspend fun clearUsageLimit() = dao.removeUsageLimit(ensureDefaultProfile(), LIMIT_USAGE)
+    suspend fun setLaunchLimit(profileId: Long, count: Int, daily: Boolean) =
+        dao.upsertUsageLimit(UsageLimitEntity(profileId = profileId, limitType = LIMIT_LAUNCH, amount = count, periodDaily = daily))
 
-    suspend fun setLaunchLimit(count: Int, daily: Boolean) =
-        dao.upsertUsageLimit(UsageLimitEntity(profileId = ensureDefaultProfile(), limitType = LIMIT_LAUNCH, amount = count, periodDaily = daily))
-
-    suspend fun clearLaunchLimit() = dao.removeUsageLimit(ensureDefaultProfile(), LIMIT_LAUNCH)
+    suspend fun clearLaunchLimit(profileId: Long) = dao.removeUsageLimit(profileId, LIMIT_LAUNCH)
 
     companion object {
         const val LIMIT_USAGE = 0
