@@ -59,6 +59,26 @@ class LockViewModel @Inject constructor(
     suspend fun verifyPin(pin: String) = unlock.verifyPin(pin)
 }
 
+/** Whether our device-admin (uninstall protection) is active, refreshed on every ON_RESUME. */
+@Composable
+fun rememberDeviceAdminActive(): androidx.compose.runtime.State<Boolean> {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val state = remember {
+        mutableStateOf(com.customblocker.service.admin.BlockerDeviceAdminReceiver.isActive(context))
+    }
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                state.value = com.customblocker.service.admin.BlockerDeviceAdminReceiver.isActive(context)
+            }
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    return state
+}
+
 /** A banner shown on protected screens while locked, offering to unlock. */
 @Composable
 fun LockedBanner(onUnlock: () -> Unit, modifier: Modifier = Modifier) {

@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Custom Blocker</string>
     <string name="accessibility_service_description">Custom Blocker uses this to detect which app is in the foreground so it can block apps and websites you have chosen. It does not collect or share your data.</string>
+    <string name="device_admin_description">While Strict Mode (Level 2+) is on, this prevents Custom Blocker from being uninstalled so blocking can\'t be removed on impulse.</string>
 </resources>

@@ -31,13 +31,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.customblocker.data.prefs.UnlockGate
+import com.customblocker.service.admin.BlockerDeviceAdminReceiver
 
 private val LEVELS = listOf(
     1 to ("Lock configuration" to "Can't edit/delete profiles or turn the app off without unlocking."),
@@ -146,6 +149,14 @@ fun StrictModeScreen(
                 )
             }
 
+            if (config.level >= 2) {
+                item {
+                    Text("Uninstall protection", style = MaterialTheme.typography.titleSmall)
+                    HorizontalDivider()
+                }
+                item { DeviceAdminCard(locked = locked, onUnlockNeeded = { showUnlock = true }) }
+            }
+
             if (!locked && config.gate == UnlockGate.PIN) {
                 item { PinSetter(hasPin = config.hasPin, onSet = viewModel::setPin) }
             }
@@ -201,6 +212,33 @@ private fun PinSetter(hasPin: Boolean, onSet: (String) -> Unit) {
                 TextButton(onClick = { onSet(pin); pin = "" }, enabled = pin.length in 4..8) {
                     Text("Save")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeviceAdminCard(locked: Boolean, onUnlockNeeded: () -> Unit) {
+    val context = LocalContext.current
+    val active by rememberDeviceAdminActive()
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                if (active) "Uninstall protection is ON" else "Uninstall protection is OFF",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                "When on, Android won't let Custom Blocker be uninstalled. Turning it off requires unlocking.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!active) {
+                TextButton(onClick = { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) }) {
+                    Text("Turn on")
+                }
+            } else {
+                TextButton(onClick = {
+                    if (locked) onUnlockNeeded() else BlockerDeviceAdminReceiver.deactivate(context)
+                }) { Text("Turn off") }
             }
         }
     }
