@@ -12,8 +12,18 @@ object ConditionTypes {
     const val WIFI = 2
     const val CHARGER = 4
     const val LOCATION = 8
-    // USAGE_LIMIT = 16, LAUNCH_COUNT = 32  — reserved; not evaluated this phase.
+    const val USAGE_LIMIT = 16
+    const val LAUNCH_COUNT = 32
 }
+
+/** Reset cadence for usage/launch counters. */
+enum class LimitPeriod { HOURLY, DAILY }
+
+/** "Block this profile's apps once they've been used [limitSeconds] this [period]." */
+data class UsageLimitSpec(val limitSeconds: Int, val period: LimitPeriod)
+
+/** "Block this profile's apps once they've been opened [limit] times this [period]." */
+data class LaunchLimitSpec(val limit: Int, val period: LimitPeriod)
 
 /** Day-of-week bitmask (matches storage). */
 object DayFlags {
@@ -53,6 +63,8 @@ data class ProfileRule(
     val timeWindows: List<TimeWindow> = emptyList(),
     val wifiSsids: Set<String> = emptySet(),
     val geofences: List<GeofenceSpec> = emptyList(),
+    val usageLimit: UsageLimitSpec? = null,
+    val launchLimit: LaunchLimitSpec? = null,
 )
 
 /** The live signals the engine evaluates a profile against at a moment in time. */
@@ -62,6 +74,10 @@ data class BlockContext(
     val wifiSsid: String? = null,
     val charging: Boolean = false,
     val insideGeofenceIds: Set<String> = emptySet(),
+    /** Foreground seconds used this period, keyed by profile id. */
+    val usageUsedSeconds: Map<Long, Int> = emptyMap(),
+    /** Launch count this period, keyed by profile id. */
+    val launchCounts: Map<Long, Int> = emptyMap(),
 )
 
 object ConditionEvaluator {
@@ -88,6 +104,14 @@ object ConditionEvaluator {
                 if (fence.inverted) !inside else inside
             }
             if (!satisfied) return false
+        }
+        if (m and ConditionTypes.USAGE_LIMIT != 0) {
+            val spec = rule.usageLimit ?: return false
+            if ((ctx.usageUsedSeconds[rule.id] ?: 0) < spec.limitSeconds) return false
+        }
+        if (m and ConditionTypes.LAUNCH_COUNT != 0) {
+            val spec = rule.launchLimit ?: return false
+            if ((ctx.launchCounts[rule.id] ?: 0) < spec.limit) return false
         }
         return true
     }

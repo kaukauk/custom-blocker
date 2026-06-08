@@ -10,8 +10,9 @@ import androidx.room.RoomDatabase
         TimeIntervalEntity::class,
         WifiNetworkEntity::class,
         GeoAddressEntity::class,
+        UsageLimitEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class BlockerDatabase : RoomDatabase() {

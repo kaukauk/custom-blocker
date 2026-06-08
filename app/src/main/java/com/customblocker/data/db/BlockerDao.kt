@@ -26,6 +26,15 @@ interface BlockerDao {
     @Query("SELECT * FROM profiles ORDER BY id")
     fun observeAllProfiles(): Flow<List<ProfileEntity>>
 
+    @Query("SELECT * FROM profiles WHERE id = :id")
+    fun observeProfile(id: Long): Flow<ProfileEntity?>
+
+    @Query("SELECT * FROM profiles WHERE id = :id")
+    suspend fun getProfile(id: Long): ProfileEntity?
+
+    @Query("DELETE FROM profiles WHERE id = :id")
+    suspend fun deleteProfile(id: Long)
+
     // --- apps ---
     @Query("SELECT * FROM profile_apps ORDER BY packageName")
     fun observeAllApps(): Flow<List<ProfileAppEntity>>
@@ -65,9 +74,25 @@ interface BlockerDao {
     @Query("DELETE FROM wifi_networks WHERE id = :id")
     suspend fun removeWifi(id: Long)
 
+    // --- usage / launch limits ---
+    @Query("SELECT * FROM usage_limits")
+    fun observeAllUsageLimits(): Flow<List<UsageLimitEntity>>
+
+    @Query("SELECT * FROM usage_limits WHERE profileId = :profileId")
+    fun observeUsageLimits(profileId: Long): Flow<List<UsageLimitEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertUsageLimit(limit: UsageLimitEntity)
+
+    @Query("DELETE FROM usage_limits WHERE profileId = :profileId AND limitType = :limitType")
+    suspend fun removeUsageLimit(profileId: Long, limitType: Int)
+
     // --- geofences ---
     @Query("SELECT * FROM geo_addresses")
     fun observeAllGeo(): Flow<List<GeoAddressEntity>>
+
+    @Query("SELECT * FROM geo_addresses WHERE profileId = :profileId")
+    fun observeGeo(profileId: Long): Flow<List<GeoAddressEntity>>
 
     @Insert
     suspend fun addGeo(geo: GeoAddressEntity)

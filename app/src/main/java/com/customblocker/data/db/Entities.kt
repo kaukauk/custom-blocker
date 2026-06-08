@@ -66,6 +66,23 @@ data class WifiNetworkEntity(
 )
 
 @Entity(
+    tableName = "usage_limits",
+    foreignKeys = [
+        ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index(value = ["profileId", "limitType"], unique = true)],
+)
+data class UsageLimitEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    /** 0 = usage time (amount in minutes), 1 = launch count (amount = launches). */
+    val limitType: Int,
+    val amount: Int,
+    /** true = resets daily, false = resets hourly. */
+    val periodDaily: Boolean = true,
+)
+
+@Entity(
     tableName = "geo_addresses",
     foreignKeys = [
         ForeignKey(entity = ProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE),

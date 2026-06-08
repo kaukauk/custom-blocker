@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +42,7 @@ import com.customblocker.ui.onboarding.rememberPermissionState
 fun BlockListScreen(
     onAddApps: () -> Unit,
     onOpenConditions: () -> Unit,
+    onBack: () -> Unit,
     viewModel: BlockListViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -48,7 +50,16 @@ fun BlockListScreen(
     val (accessibilityOn, overlayOn) = perms
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Custom Blocker") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text(state.title.ifBlank { "Profile" }) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddApps) {
                 Icon(Icons.Default.Add, contentDescription = "Add apps")

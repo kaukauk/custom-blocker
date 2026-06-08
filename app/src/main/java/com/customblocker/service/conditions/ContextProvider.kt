@@ -11,6 +11,7 @@ import javax.inject.Singleton
 @Singleton
 class ContextProvider @Inject constructor(
     private val signals: LiveSignals,
+    private val usageTracker: UsageTracker,
 ) {
     fun current(): BlockContext {
         val now = LocalDateTime.now()
@@ -19,12 +20,15 @@ class ContextProvider @Inject constructor(
         val wifi = if (signals.debugWifiActive) signals.debugWifi else signals.wifiSsid
         val charging = signals.debugCharging ?: signals.charging
         val geofences = signals.debugGeofences ?: signals.insideGeofenceIds
+        val (used, launches) = usageTracker.snapshot()
         return BlockContext(
             dayBit = dayBit,
             minuteOfDay = minute,
             wifiSsid = wifi,
             charging = charging,
             insideGeofenceIds = geofences,
+            usageUsedSeconds = used,
+            launchCounts = launches,
         )
     }
 

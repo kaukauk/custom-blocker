@@ -1,5 +1,6 @@
 package com.customblocker.ui.picker
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.customblocker.data.repo.BlockerRepository
@@ -19,13 +20,16 @@ import javax.inject.Inject
 class AppPickerViewModel @Inject constructor(
     private val repository: BlockerRepository,
     private val lister: AppLister,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+
+    private val profileId: Long = savedStateHandle.get<Long>("profileId") ?: 0L
 
     private val allApps = MutableStateFlow<List<InstalledApp>>(emptyList())
     val query = MutableStateFlow("")
 
     val selected: StateFlow<Set<String>> =
-        repository.observeApps()
+        repository.observeApps(profileId)
             .map { apps -> apps.map { it.packageName }.toSet() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
@@ -42,6 +46,6 @@ class AppPickerViewModel @Inject constructor(
     fun setQuery(q: String) { query.value = q }
 
     fun toggle(packageName: String, add: Boolean) = viewModelScope.launch {
-        if (add) repository.addApp(packageName) else repository.removeApp(packageName)
+        if (add) repository.addApp(profileId, packageName) else repository.removeApp(profileId, packageName)
     }
 }
