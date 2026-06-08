@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.customblocker.ui.onboarding.PermissionBanner
+import com.customblocker.ui.onboarding.ReliabilityBanner
 import com.customblocker.ui.onboarding.rememberPermissionState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,6 +65,7 @@ fun ProfileListScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { PermissionBanner(accessibilityOn = accessibilityOn, overlayOn = overlayOn) }
+            item { ReliabilityBanner() }
             if (profiles.isEmpty()) {
                 item { Text("No profiles yet — tap + to create one.", style = MaterialTheme.typography.bodyMedium) }
             }
