@@ -7,8 +7,11 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
+import com.customblocker.data.prefs.StrictModeConfig
+import com.customblocker.data.prefs.StrictModeStore
 import com.customblocker.domain.engine.BlockDecision
 import com.customblocker.domain.engine.BlockingEngine
+import com.customblocker.domain.strict.UnlockManager
 import com.customblocker.service.conditions.ContextProvider
 import com.customblocker.service.conditions.UsageTracker
 import com.customblocker.service.monitoring.StatusNotification
@@ -37,6 +40,10 @@ class BlockerAccessibilityService : AccessibilityService() {
     @Inject lateinit var overlay: OverlayController
     @Inject lateinit var contextProvider: ContextProvider
     @Inject lateinit var usageTracker: UsageTracker
+    @Inject lateinit var strictModeStore: StrictModeStore
+    @Inject lateinit var unlockManager: UnlockManager
+
+    @Volatile private var strictConfig: StrictModeConfig = StrictModeConfig()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var powerManager: PowerManager
@@ -54,6 +61,8 @@ class BlockerAccessibilityService : AccessibilityService() {
         engine.selfPackage = packageName   // never block ourselves (can't lock the user out)
         promoteToForeground()
         L.d(L.FG, "accessibility service connected")
+        // Keep the latest Strict Mode config for the L3 settings guard.
+        scope.launch { strictModeStore.config.collect { strictConfig = it } }
         // Mid-session ticker: accrue usage + re-evaluate the current app every few seconds.
         scope.launch {
             while (isActive) {
@@ -90,6 +99,15 @@ class BlockerAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                // Strict Mode L3: block the Settings app (except whitelisted screens) to stop the
+                // user disabling our service / force-stopping us / removing the device admin.
+                if (strictConfig.enabled && strictConfig.level >= 3 && !unlockManager.unlocked.value &&
+                    SettingsGuard.shouldBlock(pkg, event.className?.toString())
+                ) {
+                    L.d(L.ENGINE, "STRICT L3 block settings: $pkg/${event.className}")
+                    enforceBlock(BlockDecision.Block(pkg, "Settings blocked by Strict Mode"))
+                    return
+                }
                 if (pkg != lastForeground) {
                     lastForeground = pkg
                     lastUrl = null
