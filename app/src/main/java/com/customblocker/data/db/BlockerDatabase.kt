@@ -13,8 +13,9 @@ import androidx.room.RoomDatabase
         UsageLimitEntity::class,
         WebsiteEntity::class,
         UsageCounterEntity::class,
+        DailyStatEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class BlockerDatabase : RoomDatabase() {

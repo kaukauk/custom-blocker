@@ -2,6 +2,7 @@ package com.customblocker.service.notifications
 
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import com.customblocker.data.stats.StatsRecorder
 import com.customblocker.domain.engine.BlockingEngine
 import com.customblocker.service.conditions.ContextProvider
 import com.customblocker.util.L
@@ -19,6 +20,7 @@ class BlockerNotificationListener : NotificationListenerService() {
 
     @Inject lateinit var engine: BlockingEngine
     @Inject lateinit var contextProvider: ContextProvider
+    @Inject lateinit var statsRecorder: StatsRecorder
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val pkg = sbn.packageName ?: return
@@ -26,6 +28,7 @@ class BlockerNotificationListener : NotificationListenerService() {
         if (engine.shouldBlockNotification(pkg, contextProvider.current())) {
             L.d(L.ENGINE, "suppress notification from $pkg")
             runCatching { cancelNotification(sbn.key) }
+            statsRecorder.recordNotificationBlock(pkg)
         }
     }
 }

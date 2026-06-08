@@ -103,6 +103,37 @@ interface BlockerDao {
     @Query("DELETE FROM profile_websites WHERE id = :id")
     suspend fun removeWebsite(id: Long)
 
+    // --- statistics (per-app, per-day; UPSERT-increment) ---
+    @Query(
+        "INSERT INTO daily_stats (packageName, dateEpochDay, usageSeconds, blockCount, notificationBlockCount) " +
+            "VALUES (:pkg, :day, :seconds, 0, 0) " +
+            "ON CONFLICT(packageName, dateEpochDay) DO UPDATE SET usageSeconds = usageSeconds + :seconds",
+    )
+    suspend fun addUsageSeconds(pkg: String, day: Long, seconds: Int)
+
+    @Query(
+        "INSERT INTO daily_stats (packageName, dateEpochDay, usageSeconds, blockCount, notificationBlockCount) " +
+            "VALUES (:pkg, :day, 0, 1, 0) " +
+            "ON CONFLICT(packageName, dateEpochDay) DO UPDATE SET blockCount = blockCount + 1",
+    )
+    suspend fun incrementBlock(pkg: String, day: Long)
+
+    @Query(
+        "INSERT INTO daily_stats (packageName, dateEpochDay, usageSeconds, blockCount, notificationBlockCount) " +
+            "VALUES (:pkg, :day, 0, 0, 1) " +
+            "ON CONFLICT(packageName, dateEpochDay) DO UPDATE SET notificationBlockCount = notificationBlockCount + 1",
+    )
+    suspend fun incrementNotificationBlock(pkg: String, day: Long)
+
+    /** Per-app totals over [fromDay, toDay], most-used/blocked first. */
+    @Query(
+        "SELECT packageName, SUM(usageSeconds) AS usageSeconds, SUM(blockCount) AS blockCount, " +
+            "SUM(notificationBlockCount) AS notificationBlockCount " +
+            "FROM daily_stats WHERE dateEpochDay BETWEEN :fromDay AND :toDay " +
+            "GROUP BY packageName ORDER BY usageSeconds DESC",
+    )
+    fun observeAppStats(fromDay: Long, toDay: Long): Flow<List<AppStat>>
+
     // --- usage counters (persisted runtime state) ---
     @Query("SELECT * FROM usage_counters")
     suspend fun getAllUsageCounters(): List<UsageCounterEntity>

@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
@@ -49,6 +50,7 @@ import com.customblocker.ui.strict.UnlockDialog
 fun ProfileListScreen(
     onOpenProfile: (Long) -> Unit,
     onOpenStrictMode: () -> Unit,
+    onOpenStats: () -> Unit,
     viewModel: ProfileListViewModel = hiltViewModel(),
     lockViewModel: LockViewModel = hiltViewModel(),
 ) {
@@ -74,6 +76,9 @@ fun ProfileListScreen(
             TopAppBar(
                 title = { Text("Custom Blocker") },
                 actions = {
+                    IconButton(onClick = onOpenStats) {
+                        Icon(Icons.Default.BarChart, contentDescription = "Statistics")
+                    }
                     IconButton(onClick = onOpenStrictMode) {
                         Icon(Icons.Default.Lock, contentDescription = "Strict Mode")
                     }

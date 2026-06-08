@@ -110,6 +110,32 @@ data class UsageCounterEntity(
     val launchPeriodKey: Long = 0,
 )
 
+/**
+ * Per-app, per-day statistics (PLAN.md §13). One row per (package, day) accumulates foreground
+ * seconds, block count, and suppressed-notification count via UPSERT-increment. Dashboards
+ * aggregate over day/week ranges. dateEpochDay = LocalDate.toEpochDay().
+ */
+/** Aggregated per-app totals over a date range (Room query projection). */
+data class AppStat(
+    val packageName: String,
+    val usageSeconds: Int,
+    val blockCount: Int,
+    val notificationBlockCount: Int,
+)
+
+@Entity(
+    tableName = "daily_stats",
+    indices = [Index(value = ["packageName", "dateEpochDay"], unique = true)],
+)
+data class DailyStatEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val packageName: String,
+    val dateEpochDay: Long,
+    val usageSeconds: Int = 0,
+    val blockCount: Int = 0,
+    val notificationBlockCount: Int = 0,
+)
+
 @Entity(
     tableName = "profile_websites",
     foreignKeys = [
