@@ -1,5 +1,6 @@
 package com.customblocker.data.repo
 
+import com.customblocker.data.db.AppStat
 import com.customblocker.data.db.BlockerDao
 import com.customblocker.data.db.GeoAddressEntity
 import com.customblocker.data.db.ProfileAppEntity
@@ -189,6 +190,10 @@ class BlockerRepository @Inject constructor(
     /** Profiles flagged to auto-add new installs (used by PackageAddedReceiver). */
     suspend fun profilesAutoAddingApps(): List<ProfileEntity> =
         dao.getProfilesWithAddNewApps()
+
+    // --- statistics (Phase 7) ---
+    fun observeAppStats(fromDay: Long, toDay: Long): Flow<List<AppStat>> =
+        dao.observeAppStats(fromDay, toDay)
 
     // --- persisted usage counters (Phase 5 reliability) ---
     suspend fun loadUsageCounters(): List<UsageCounterEntity> = dao.getAllUsageCounters()
