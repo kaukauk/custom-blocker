@@ -28,9 +28,10 @@ class EngineSync @Inject constructor(
         started = true
         scope.launch {
             repository.ensureDefaultProfile()
-            repository.engineSnapshot().distinctUntilChanged().collect { snapshot ->
-                engine.update(snapshot)
-                L.d(L.ENGINE, "snapshot updated: enabled=${snapshot.enabled} mode=${snapshot.mode} apps=${snapshot.apps.size}")
+            repository.profileRules().distinctUntilChanged().collect { rules ->
+                engine.update(rules)
+                L.d(L.ENGINE, "rules updated: ${rules.size} profile(s); " +
+                    rules.joinToString { "'${it.title}' enabled=${it.enabled} mask=${it.conditionsMask} apps=${it.apps.size}" })
             }
         }
     }

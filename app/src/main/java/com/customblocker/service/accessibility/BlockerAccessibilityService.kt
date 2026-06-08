@@ -5,6 +5,7 @@ import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import com.customblocker.domain.engine.BlockDecision
 import com.customblocker.domain.engine.BlockingEngine
+import com.customblocker.service.conditions.ContextProvider
 import com.customblocker.service.overlay.OverlayController
 import com.customblocker.util.L
 import dagger.hilt.android.AndroidEntryPoint
@@ -20,6 +21,7 @@ class BlockerAccessibilityService : AccessibilityService() {
 
     @Inject lateinit var engine: BlockingEngine
     @Inject lateinit var overlay: OverlayController
+    @Inject lateinit var contextProvider: ContextProvider
 
     private var lastForeground: String? = null
 
@@ -37,7 +39,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         lastForeground = pkg
 
         L.d(L.FG, "foreground=$pkg cls=${event.className}")
-        when (val decision = engine.decide(pkg)) {
+        when (val decision = engine.decide(pkg, contextProvider.current())) {
             is BlockDecision.Block -> {
                 L.d(L.ENGINE, "BLOCK $pkg :: ${decision.reason}")
                 overlay.show(appLabel = pkg, reason = decision.reason)

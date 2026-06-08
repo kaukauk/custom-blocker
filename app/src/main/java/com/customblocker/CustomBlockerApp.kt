@@ -2,6 +2,7 @@ package com.customblocker
 
 import android.app.Application
 import com.customblocker.domain.engine.EngineSync
+import com.customblocker.service.conditions.SignalsCoordinator
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -15,11 +16,14 @@ class CustomBlockerApp : Application() {
     @InstallIn(SingletonComponent::class)
     interface AppEntryPoint {
         fun engineSync(): EngineSync
+        fun signalsCoordinator(): SignalsCoordinator
     }
 
     override fun onCreate() {
         super.onCreate()
-        // Start streaming the DB-backed block rules into the engine for this process.
-        EntryPointAccessors.fromApplication(this, AppEntryPoint::class.java).engineSync().start()
+        val entry = EntryPointAccessors.fromApplication(this, AppEntryPoint::class.java)
+        // Start the live condition signals (wifi/charger) and stream DB rules into the engine.
+        entry.signalsCoordinator().start()
+        entry.engineSync().start()
     }
 }

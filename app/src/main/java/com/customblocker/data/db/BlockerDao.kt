@@ -23,16 +23,55 @@ interface BlockerDao {
     @Query("SELECT * FROM profiles ORDER BY id LIMIT 1")
     fun observeFirstProfile(): Flow<ProfileEntity?>
 
-    // --- apps within a profile ---
+    @Query("SELECT * FROM profiles ORDER BY id")
+    fun observeAllProfiles(): Flow<List<ProfileEntity>>
+
+    // --- apps ---
+    @Query("SELECT * FROM profile_apps ORDER BY packageName")
+    fun observeAllApps(): Flow<List<ProfileAppEntity>>
+
     @Query("SELECT * FROM profile_apps WHERE profileId = :profileId ORDER BY packageName")
     fun observeApps(profileId: Long): Flow<List<ProfileAppEntity>>
-
-    @Query("SELECT packageName FROM profile_apps WHERE profileId = :profileId AND enabled = 1")
-    fun observeBlockedPackages(profileId: Long): Flow<List<String>>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun addApp(app: ProfileAppEntity)
 
     @Query("DELETE FROM profile_apps WHERE profileId = :profileId AND packageName = :packageName")
     suspend fun removeApp(profileId: Long, packageName: String)
+
+    // --- time intervals ---
+    @Query("SELECT * FROM time_intervals")
+    fun observeAllIntervals(): Flow<List<TimeIntervalEntity>>
+
+    @Query("SELECT * FROM time_intervals WHERE profileId = :profileId ORDER BY fromMinuteOfDay")
+    fun observeIntervals(profileId: Long): Flow<List<TimeIntervalEntity>>
+
+    @Insert
+    suspend fun addInterval(interval: TimeIntervalEntity)
+
+    @Query("DELETE FROM time_intervals WHERE id = :id")
+    suspend fun removeInterval(id: Long)
+
+    // --- wifi networks ---
+    @Query("SELECT * FROM wifi_networks")
+    fun observeAllWifi(): Flow<List<WifiNetworkEntity>>
+
+    @Query("SELECT * FROM wifi_networks WHERE profileId = :profileId ORDER BY ssid")
+    fun observeWifi(profileId: Long): Flow<List<WifiNetworkEntity>>
+
+    @Insert
+    suspend fun addWifi(network: WifiNetworkEntity)
+
+    @Query("DELETE FROM wifi_networks WHERE id = :id")
+    suspend fun removeWifi(id: Long)
+
+    // --- geofences ---
+    @Query("SELECT * FROM geo_addresses")
+    fun observeAllGeo(): Flow<List<GeoAddressEntity>>
+
+    @Insert
+    suspend fun addGeo(geo: GeoAddressEntity)
+
+    @Query("DELETE FROM geo_addresses WHERE id = :id")
+    suspend fun removeGeo(id: Long)
 }

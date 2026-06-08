@@ -19,6 +19,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -39,6 +40,7 @@ import com.customblocker.ui.onboarding.rememberPermissionState
 @Composable
 fun BlockListScreen(
     onAddApps: () -> Unit,
+    onOpenConditions: () -> Unit,
     viewModel: BlockListViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -89,6 +91,11 @@ fun BlockListScreen(
                             onClick = { viewModel.setMode(BlockingMode.ALLOWLIST) },
                             label = { Text("Allow list") },
                         )
+                    }
+                }
+                item {
+                    OutlinedButton(onClick = onOpenConditions, modifier = Modifier.fillMaxWidth()) {
+                        Text("Conditions (when to block)")
                     }
                 }
                 item {
