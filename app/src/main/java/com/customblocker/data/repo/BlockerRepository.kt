@@ -4,11 +4,15 @@ import com.customblocker.data.db.BlockerDao
 import com.customblocker.data.db.ProfileAppEntity
 import com.customblocker.data.db.ProfileEntity
 import com.customblocker.data.db.TimeIntervalEntity
+import com.customblocker.data.db.UsageLimitEntity
 import com.customblocker.data.db.WifiNetworkEntity
 import com.customblocker.domain.engine.BlockingMode
 import com.customblocker.domain.engine.GeofenceSpec
+import com.customblocker.domain.engine.LaunchLimitSpec
+import com.customblocker.domain.engine.LimitPeriod
 import com.customblocker.domain.engine.ProfileRule
 import com.customblocker.domain.engine.TimeWindow
+import com.customblocker.domain.engine.UsageLimitSpec
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -32,7 +36,22 @@ class BlockerRepository @Inject constructor(
     }
 
     /** The engine's view: every profile flattened with its apps + conditions. */
-    fun profileRules(): Flow<List<ProfileRule>> = combine(
+    fun profileRules(): Flow<List<ProfileRule>> =
+        combine(baseRules(), dao.observeAllUsageLimits()) { rules, limits ->
+            rules.map { rule ->
+                val mine = limits.filter { it.profileId == rule.id }
+                rule.copy(
+                    usageLimit = mine.find { it.limitType == LIMIT_USAGE }?.let {
+                        UsageLimitSpec(it.amount * 60, period(it.periodDaily))
+                    },
+                    launchLimit = mine.find { it.limitType == LIMIT_LAUNCH }?.let {
+                        LaunchLimitSpec(it.amount, period(it.periodDaily))
+                    },
+                )
+            }
+        }
+
+    private fun baseRules(): Flow<List<ProfileRule>> = combine(
         dao.observeAllProfiles(),
         dao.observeAllApps(),
         dao.observeAllIntervals(),
@@ -56,6 +75,8 @@ class BlockerRepository @Inject constructor(
             )
         }
     }
+
+    private fun period(daily: Boolean) = if (daily) LimitPeriod.DAILY else LimitPeriod.HOURLY
 
     // --- default-profile observers for the UI ---
     fun observeProfile(): Flow<ProfileEntity?> = dao.observeFirstProfile()
@@ -109,4 +130,25 @@ class BlockerRepository @Inject constructor(
         dao.addWifi(WifiNetworkEntity(profileId = ensureDefaultProfile(), ssid = ssid))
 
     suspend fun removeWifi(id: Long) = dao.removeWifi(id)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeUsageLimits(): Flow<List<UsageLimitEntity>> =
+        dao.observeFirstProfile().flatMapLatest { p ->
+            if (p == null) flowOf(emptyList()) else dao.observeUsageLimits(p.id)
+        }
+
+    suspend fun setUsageLimit(minutes: Int, daily: Boolean) =
+        dao.upsertUsageLimit(UsageLimitEntity(profileId = ensureDefaultProfile(), limitType = LIMIT_USAGE, amount = minutes, periodDaily = daily))
+
+    suspend fun clearUsageLimit() = dao.removeUsageLimit(ensureDefaultProfile(), LIMIT_USAGE)
+
+    suspend fun setLaunchLimit(count: Int, daily: Boolean) =
+        dao.upsertUsageLimit(UsageLimitEntity(profileId = ensureDefaultProfile(), limitType = LIMIT_LAUNCH, amount = count, periodDaily = daily))
+
+    suspend fun clearLaunchLimit() = dao.removeUsageLimit(ensureDefaultProfile(), LIMIT_LAUNCH)
+
+    companion object {
+        const val LIMIT_USAGE = 0
+        const val LIMIT_LAUNCH = 1
+    }
 }

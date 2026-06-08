@@ -65,6 +65,19 @@ interface BlockerDao {
     @Query("DELETE FROM wifi_networks WHERE id = :id")
     suspend fun removeWifi(id: Long)
 
+    // --- usage / launch limits ---
+    @Query("SELECT * FROM usage_limits")
+    fun observeAllUsageLimits(): Flow<List<UsageLimitEntity>>
+
+    @Query("SELECT * FROM usage_limits WHERE profileId = :profileId")
+    fun observeUsageLimits(profileId: Long): Flow<List<UsageLimitEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertUsageLimit(limit: UsageLimitEntity)
+
+    @Query("DELETE FROM usage_limits WHERE profileId = :profileId AND limitType = :limitType")
+    suspend fun removeUsageLimit(profileId: Long, limitType: Int)
+
     // --- geofences ---
     @Query("SELECT * FROM geo_addresses")
     fun observeAllGeo(): Flow<List<GeoAddressEntity>>

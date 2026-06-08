@@ -16,7 +16,9 @@ class BlockingEngineTest {
         wifi: String? = null,
         charging: Boolean = false,
         inside: Set<String> = emptySet(),
-    ) = BlockContext(dayBit, minute, wifi, charging, inside)
+        used: Map<Long, Int> = emptyMap(),
+        launches: Map<Long, Int> = emptyMap(),
+    ) = BlockContext(dayBit, minute, wifi, charging, inside, used, launches)
 
     private fun rule(
         apps: Set<String> = setOf(CHROME),
@@ -27,7 +29,9 @@ class BlockingEngineTest {
         windows: List<TimeWindow> = emptyList(),
         ssids: Set<String> = emptySet(),
         fences: List<GeofenceSpec> = emptyList(),
-    ) = ProfileRule(1, "Test", enabled, mode, apps, mask, dayFlags, windows, ssids, fences)
+        usage: UsageLimitSpec? = null,
+        launch: LaunchLimitSpec? = null,
+    ) = ProfileRule(1, "Test", enabled, mode, apps, mask, dayFlags, windows, ssids, fences, usage, launch)
 
     private fun blocked(d: BlockDecision) = d is BlockDecision.Block
 
@@ -112,6 +116,33 @@ class BlockingEngineTest {
         val timeProfile = rule(mask = ConditionTypes.TIME, windows = listOf(TimeWindow(0, 1))) // basically never
         val chargerProfile = rule(mask = ConditionTypes.CHARGER)
         assertTrue(blocked(engine(timeProfile, chargerProfile).decide(CHROME, ctx(minute = 12 * 60, charging = true))))
+    }
+
+    // --- usage limit ---
+    @Test fun usageLimit_blocksOnceOverLimit() {
+        val r = rule(mask = ConditionTypes.USAGE_LIMIT, usage = UsageLimitSpec(900, LimitPeriod.DAILY)) // 15 min
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(used = mapOf(1L to 600)))) // under
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(used = mapOf(1L to 900)))))               // at limit
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(used = mapOf(1L to 1200)))))              // over
+    }
+
+    // --- launch count ---
+    @Test fun launchCount_blocksOnceOverLimit() {
+        val r = rule(mask = ConditionTypes.LAUNCH_COUNT, launch = LaunchLimitSpec(3, LimitPeriod.DAILY))
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(launches = mapOf(1L to 2))))
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(launches = mapOf(1L to 3)))))
+    }
+
+    @Test fun usageLimit_andTime_bothRequired() {
+        val r = rule(
+            mask = ConditionTypes.TIME or ConditionTypes.USAGE_LIMIT,
+            windows = listOf(TimeWindow(9 * 60, 17 * 60)),
+            usage = UsageLimitSpec(300, LimitPeriod.DAILY),
+        )
+        // over limit but outside window -> allowed
+        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx(minute = 20 * 60, used = mapOf(1L to 600))))
+        // in window AND over limit -> blocked
+        assertTrue(blocked(engine(r).decide(CHROME, ctx(minute = 10 * 60, used = mapOf(1L to 600)))))
     }
 
     // --- allow-list ---

@@ -1,6 +1,7 @@
 package com.customblocker.ui.conditions
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,8 +9,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -37,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -165,6 +169,46 @@ fun ConditionsScreen(
                 }
             }
 
+            // --- USAGE LIMIT ---
+            item {
+                SectionHeader(
+                    title = "Usage time limit",
+                    enabled = mask and ConditionTypes.USAGE_LIMIT != 0,
+                    onToggle = { viewModel.toggleUsage(it) },
+                )
+            }
+            if (mask and ConditionTypes.USAGE_LIMIT != 0) {
+                item {
+                    LimitEditor(
+                        value = state.usageMinutes ?: 15,
+                        unitLabel = "minutes",
+                        daily = state.usageDaily,
+                        onValue = { viewModel.setUsageLimit(it, state.usageDaily) },
+                        onPeriod = { viewModel.setUsageLimit(state.usageMinutes ?: 15, it) },
+                    )
+                }
+            }
+
+            // --- LAUNCH COUNT ---
+            item {
+                SectionHeader(
+                    title = "Launch count limit",
+                    enabled = mask and ConditionTypes.LAUNCH_COUNT != 0,
+                    onToggle = { viewModel.toggleLaunch(it) },
+                )
+            }
+            if (mask and ConditionTypes.LAUNCH_COUNT != 0) {
+                item {
+                    LimitEditor(
+                        value = state.launchCount ?: 5,
+                        unitLabel = "launches",
+                        daily = state.launchDaily,
+                        onValue = { viewModel.setLaunchLimit(it, state.launchDaily) },
+                        onPeriod = { viewModel.setLaunchLimit(state.launchCount ?: 5, it) },
+                    )
+                }
+            }
+
             // --- CHARGER ---
             item {
                 SectionHeader(
@@ -196,6 +240,39 @@ fun ConditionsScreen(
             },
             dismissButton = { TextButton(onClick = { pickerStage = 0 }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun LimitEditor(
+    value: Int,
+    unitLabel: String,
+    daily: Boolean,
+    onValue: (Int) -> Unit,
+    onPeriod: (Boolean) -> Unit,
+) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = {
+                    text = it.filter(Char::isDigit).take(4)
+                    text.toIntOrNull()?.let { n -> if (n > 0) onValue(n) }
+                },
+                label = { Text(unitLabel) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.width(140.dp),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = daily, onClick = { onPeriod(true) }, label = { Text("Per day") })
+            FilterChip(selected = !daily, onClick = { onPeriod(false) }, label = { Text("Per hour") })
+        }
     }
 }
 
