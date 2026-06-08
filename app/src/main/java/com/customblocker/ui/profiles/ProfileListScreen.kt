@@ -40,6 +40,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.customblocker.ui.onboarding.PermissionBanner
 import com.customblocker.ui.onboarding.ReliabilityBanner
 import com.customblocker.ui.onboarding.rememberPermissionState
+import com.customblocker.ui.strict.LockViewModel
+import com.customblocker.ui.strict.LockedBanner
+import com.customblocker.ui.strict.UnlockDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,11 +50,24 @@ fun ProfileListScreen(
     onOpenProfile: (Long) -> Unit,
     onOpenStrictMode: () -> Unit,
     viewModel: ProfileListViewModel = hiltViewModel(),
+    lockViewModel: LockViewModel = hiltViewModel(),
 ) {
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val perms by rememberPermissionState()
     val (accessibilityOn, overlayOn) = perms
     var showCreate by remember { mutableStateOf(false) }
+    val lock by lockViewModel.state.collectAsStateWithLifecycle()
+    val locked = lock.locked
+    var showUnlock by remember { mutableStateOf(false) }
+
+    if (showUnlock) {
+        UnlockDialog(
+            config = lock.config,
+            lockViewModel = lockViewModel,
+            onUnlocked = { showUnlock = false },
+            onDismiss = { showUnlock = false },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -77,6 +93,9 @@ fun ProfileListScreen(
         ) {
             item { PermissionBanner(accessibilityOn = accessibilityOn, overlayOn = overlayOn) }
             item { ReliabilityBanner() }
+            if (locked) {
+                item { LockedBanner(onUnlock = { showUnlock = true }) }
+            }
             if (profiles.isEmpty()) {
                 item { Text("No profiles yet — tap + to create one.", style = MaterialTheme.typography.bodyMedium) }
             }
@@ -97,8 +116,15 @@ fun ProfileListScreen(
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
-                        Switch(checked = profile.enabled, onCheckedChange = { viewModel.setEnabled(profile.id, it) })
-                        IconButton(onClick = { viewModel.deleteProfile(profile.id) }) {
+                        Switch(
+                            checked = profile.enabled,
+                            onCheckedChange = { if (locked) showUnlock = true else viewModel.setEnabled(profile.id, it) },
+                            enabled = !locked,
+                        )
+                        IconButton(
+                            onClick = { if (locked) showUnlock = true else viewModel.deleteProfile(profile.id) },
+                            enabled = !locked,
+                        ) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete profile")
                         }
                     }

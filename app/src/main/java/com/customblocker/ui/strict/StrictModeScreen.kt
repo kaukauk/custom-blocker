@@ -57,8 +57,21 @@ private val GATES = listOf(
 fun StrictModeScreen(
     onBack: () -> Unit,
     viewModel: StrictModeViewModel = hiltViewModel(),
+    lockViewModel: LockViewModel = hiltViewModel(),
 ) {
     val config by viewModel.config.collectAsStateWithLifecycle()
+    val lock by lockViewModel.state.collectAsStateWithLifecycle()
+    val locked = lock.locked
+    var showUnlock by remember { mutableStateOf(false) }
+
+    if (showUnlock) {
+        UnlockDialog(
+            config = lock.config,
+            lockViewModel = lockViewModel,
+            onUnlocked = { showUnlock = false },
+            onDismiss = { showUnlock = false },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -77,6 +90,9 @@ fun StrictModeScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (locked) {
+                item { LockedBanner(onUnlock = { showUnlock = true }) }
+            }
             item {
                 Row(
                     Modifier.fillMaxWidth(),
@@ -90,7 +106,11 @@ fun StrictModeScreen(
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    Switch(checked = config.enabled, onCheckedChange = viewModel::setEnabled)
+                    Switch(
+                        checked = config.enabled,
+                        onCheckedChange = viewModel::setEnabled,
+                        enabled = !locked,
+                    )
                 }
             }
 
@@ -105,6 +125,7 @@ fun StrictModeScreen(
                     selected = config.level == lvl,
                     title = "L$lvl — $title",
                     description = desc,
+                    enabled = !locked,
                     onClick = { viewModel.setLevel(lvl) },
                 )
             }
@@ -120,14 +141,15 @@ fun StrictModeScreen(
                     selected = config.gate == gate,
                     title = title,
                     description = desc,
+                    enabled = !locked,
                     onClick = { viewModel.setGate(gate) },
                 )
             }
 
-            if (config.gate == UnlockGate.PIN) {
+            if (!locked && config.gate == UnlockGate.PIN) {
                 item { PinSetter(hasPin = config.hasPin, onSet = viewModel::setPin) }
             }
-            if (config.gate == UnlockGate.TIMER) {
+            if (!locked && config.gate == UnlockGate.TIMER) {
                 item { TimerSetter(minutes = config.timerMinutes, onSet = viewModel::setTimerMinutes) }
             }
         }
@@ -135,14 +157,22 @@ fun StrictModeScreen(
 }
 
 @Composable
-private fun OptionRow(selected: Boolean, title: String, description: String, onClick: () -> Unit) {
+private fun OptionRow(
+    selected: Boolean,
+    title: String,
+    description: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
     Card(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().selectable(selected = selected, onClick = onClick).padding(16.dp),
+            Modifier.fillMaxWidth()
+                .selectable(selected = selected, enabled = enabled, onClick = onClick)
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            RadioButton(selected = selected, onClick = onClick)
+            RadioButton(selected = selected, onClick = onClick, enabled = enabled)
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge)
                 Text(description, style = MaterialTheme.typography.bodySmall)
