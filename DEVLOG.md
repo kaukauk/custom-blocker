@@ -13,6 +13,44 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ---
 
+## 2026-06-08 — Phase 6: Strict Mode (Pixel/AOSP)
+
+**Branch:** `phase6-strict-mode` → merged to `master` (`44d520c`). **State:** ✅ COMPLETE, verified.
+App-global, opt-in, escalating anti-circumvention gated by an unlock method.
+
+**6-1 — config + screen** (`ce38d79`): `StrictModeStore` (DataStore): enabled / level(1–3) / gate
+(NONE/PIN/TIMER/CHARGER) / timerMinutes; PIN stored only as a **salted SHA-256 hash** (`verifyPin`
+re-hashes). `StrictModeScreen` (lock icon in home top bar) picks level + gate (+ set PIN / timer).
+
+**6-2 — L1 lock config + unlock gates** (`75e166c`): `UnlockManager` holds an **in-memory** unlocked
+session (resets on process death → app re-locks on restart). `LockViewModel` exposes
+`locked = enabled && !unlocked`. While locked, the Strict screen, profile list (delete/enable), and
+profile editor (blocking switch, mode chips, add/remove) **disable** their mutating controls and show
+a `LockedBanner` → `UnlockDialog`. Gates: PIN (hash verify), TIMER (countdown), CHARGER (must be
+plugged), NONE (confirm). **Lock-out guard:** PIN gate with no PIN set falls back to confirm.
+Verified: enable → instant lock (disabled controls + banner); unlock re-enables; re-locks after
+restart; PIN persists; PIN hash round-trip proven (`sha256(salt:pin)` matches stored, wrong rejected).
+
+**6-3 — L2 device-admin uninstall block** (`f2c84ef`): `BlockerDeviceAdminReceiver` + `device_admin
+.xml`; manifest receiver (BIND_DEVICE_ADMIN). L2+ card turns protection on (system activation
+screen) / off (`removeActiveAdmin` on our own admin — unrestricted; gated behind unlock). Verified:
+with admin active, even `adb uninstall` → `DELETE_FAILED_DEVICE_POLICY_MANAGER`; in-app Turn off
+removes it and uninstall then succeeds (reversible — no permanent lock-out). Note: `dpm
+remove-active-admin` from shell refuses non-test admins (SecurityException) — only our in-app path
+removes it.
+
+**6-4 — L3 block device Settings** (`1f47967`): while L3 active **and locked**, the a11y service
+ejects from `com.android.settings` (overlay + home). Service collects `StrictModeConfig` + checks
+`UnlockManager`, so unlocking restores Settings access. **Whitelist abandoned:** AOSP fires multiple
+window-state events per screen with generic view classNames (`android.widget.FrameLayout`), not the
+activity alias, so a className whitelist leaks — `SettingsGuard` blocks **all** of Settings (strict-
+correct; unlock to reach Settings). Verified: locked+L3 → Settings ejected; unlocked → Settings opens.
+
+**Honesty:** L3 is the brittle, Pixel/AOSP-only piece as flagged. Anti-tamper covers the high-value
+targets (accessibility settings, force-stop, device-admin screens are all inside Settings). Recents/
+task-manager detection not added. Unlock session is in-memory (process death re-locks); a determined
+user with adb/root can still intervene — the OS is the ultimate authority.
+
 ## 2026-06-08 — Lock-out fix (between Phase 4 and 5)
 
 **Commit `36588eb` on `master`.** User testing surfaced a real lock-out: in **allow-list** mode the
