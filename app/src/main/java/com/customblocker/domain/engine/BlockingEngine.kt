@@ -53,4 +53,30 @@ class BlockingEngine @Inject constructor() {
         }
         return BlockDecision.Allow
     }
+
+    /**
+     * Website decision (PLAN.md §10). Called when [packageName] is a browser. [url] is the raw
+     * URL-bar text (null/blank when it couldn't be read). A site is blocked if ANY active profile
+     * has a matching website rule; if the URL is unreadable, an active profile with
+     * [ProfileRule.blockUnsupportedBrowsers] blocks the whole browser.
+     */
+    fun decideUrl(packageName: String?, url: String?, ctx: BlockContext): BlockDecision {
+        if (packageName.isNullOrBlank()) return BlockDecision.Allow
+        if (packageName in neverBlock) return BlockDecision.Allow
+
+        val readable = !url.isNullOrBlank()
+        for (rule in profiles) {
+            if (rule.websites.isEmpty() && !rule.blockUnsupportedBrowsers) continue
+            if (!ConditionEvaluator.isActive(rule, ctx)) continue
+            if (readable) {
+                val hit = rule.websites.firstOrNull { it.matches(url!!) }
+                if (hit != null) {
+                    return BlockDecision.Block(packageName, "site \"${hit.value}\" by \"${rule.title}\"")
+                }
+            } else if (rule.blockUnsupportedBrowsers) {
+                return BlockDecision.Block(packageName, "unreadable URL by \"${rule.title}\"")
+            }
+        }
+        return BlockDecision.Allow
+    }
 }

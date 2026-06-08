@@ -11,6 +11,7 @@ object L {
     const val FG = "FgDetect"
     const val OVERLAY = "Overlay"
     const val COND = "Cond"
+    const val URL = "UrlDetect"
 
     fun d(tag: String, msg: String) = Log.d(tag, msg)
     fun w(tag: String, msg: String) = Log.w(tag, msg)

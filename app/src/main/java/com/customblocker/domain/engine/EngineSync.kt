@@ -31,7 +31,7 @@ class EngineSync @Inject constructor(
             repository.profileRules().distinctUntilChanged().collect { rules ->
                 engine.update(rules)
                 L.d(L.ENGINE, "rules updated: ${rules.size} profile(s); " +
-                    rules.joinToString { "'${it.title}' enabled=${it.enabled} mask=${it.conditionsMask} apps=${it.apps.size}" })
+                    rules.joinToString { "'${it.title}' enabled=${it.enabled} mask=${it.conditionsMask} apps=${it.apps.size} sites=${it.websites.size}" })
             }
         }
     }

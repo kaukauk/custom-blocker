@@ -87,6 +87,19 @@ interface BlockerDao {
     @Query("DELETE FROM usage_limits WHERE profileId = :profileId AND limitType = :limitType")
     suspend fun removeUsageLimit(profileId: Long, limitType: Int)
 
+    // --- websites / keywords ---
+    @Query("SELECT * FROM profile_websites")
+    fun observeAllWebsites(): Flow<List<WebsiteEntity>>
+
+    @Query("SELECT * FROM profile_websites WHERE profileId = :profileId ORDER BY value")
+    fun observeWebsites(profileId: Long): Flow<List<WebsiteEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun addWebsite(website: WebsiteEntity)
+
+    @Query("DELETE FROM profile_websites WHERE id = :id")
+    suspend fun removeWebsite(id: Long)
+
     // --- geofences ---
     @Query("SELECT * FROM geo_addresses")
     fun observeAllGeo(): Flow<List<GeoAddressEntity>>

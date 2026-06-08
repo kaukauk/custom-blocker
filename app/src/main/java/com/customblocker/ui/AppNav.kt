@@ -11,6 +11,7 @@ import com.customblocker.ui.conditions.ConditionsScreen
 import com.customblocker.ui.map.MapPickerScreen
 import com.customblocker.ui.picker.AppPickerScreen
 import com.customblocker.ui.profiles.ProfileListScreen
+import com.customblocker.ui.websites.WebsiteScreen
 
 object Routes {
     const val PROFILES = "profiles"
@@ -18,11 +19,13 @@ object Routes {
     const val PICKER = "picker/{profileId}"
     const val CONDITIONS = "conditions/{profileId}"
     const val MAP = "map/{profileId}"
+    const val WEBSITES = "websites/{profileId}"
 
     fun profile(id: Long) = "profile/$id"
     fun picker(id: Long) = "picker/$id"
     fun conditions(id: Long) = "conditions/$id"
     fun map(id: Long) = "map/$id"
+    fun websites(id: Long) = "websites/$id"
 }
 
 private val profileIdArg = listOf(navArgument("profileId") { type = NavType.LongType })
@@ -39,6 +42,7 @@ fun AppNav() {
             BlockListScreen(
                 onAddApps = { navController.navigate(Routes.picker(id)) },
                 onOpenConditions = { navController.navigate(Routes.conditions(id)) },
+                onOpenWebsites = { navController.navigate(Routes.websites(id)) },
                 onBack = { navController.popBackStack() },
             )
         }
@@ -54,6 +58,9 @@ fun AppNav() {
         }
         composable(Routes.MAP, arguments = profileIdArg) {
             MapPickerScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.WEBSITES, arguments = profileIdArg) {
+            WebsiteScreen(onBack = { navController.popBackStack() })
         }
     }
 }
