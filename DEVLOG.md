@@ -13,6 +13,33 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ---
 
+## 2026-06-08 — Phase 2: data model + configurable block list
+
+**Branch:** `phase2-data-model` → merged to `master`. **State:** ✅ COMPLETE, verified on emulator.
+
+Replaced the hardcoded block set with a DB-backed, UI-editable list streamed to the engine:
+- `data/db`: Room (`profiles`, `profile_apps`) + `BlockerDao` + `BlockerDatabase` (v1,
+  destructive-migration in dev). One implicit "Default" profile in Phase 2; multi-profile is P3.
+- `data/repo/BlockerRepository`: `engineSnapshot(): Flow<EngineSnapshot>` (enabled+mode+packages
+  via flatMapLatest over the first profile), plus add/remove/setEnabled/setMode + ensureDefaultProfile.
+- Engine refactor: `BlockingEngine` now evaluates an atomic `EngineSnapshot` (enabled + BLOCKLIST/
+  ALLOWLIST mode + apps) instead of a raw set; `neverBlock` guards systemui/launchers in both modes.
+  8 JVM unit tests (both modes, disabled, null, never-block) green.
+- `EngineSync` (@Singleton): collects `repo.engineSnapshot()` → `engine.update()`; started from
+  `CustomBlockerApp.onCreate` via a Hilt `@EntryPoint`. Single-process, so the a11y service reads
+  the same engine singleton.
+- UI: `BlockListScreen` (master switch, Block/Allow chips, app list w/ remove, FAB) +
+  `AppPickerScreen` (searchable, checkbox add/remove) + `AppLister` (PackageManager launchables) +
+  Hilt ViewModels + `AppNav` (Navigation-Compose). Onboarding became a `PermissionBanner` on home.
+
+Verified (CLI + uiautomator-driven taps, headless): empty list → Chrome ALLOWED; tapped Chrome in
+picker → `snapshot updated … apps=1` → Chrome BLOCKED + ejected (no rebuild); unchecked Chrome →
+`apps=0` → Chrome ALLOWED again. Exit criterion met.
+
+Gotchas: `fallbackToDestructiveMigration(dropAllTables=true)` is Room 2.7 — 2.6.1 needs the no-arg
+form. Driving Compose via blind `input tap` is unreliable; use `uiautomator dump` to get exact node
+bounds (the `input text` into the search field also didn't focus reliably — node-bounds taps work).
+
 ## 2026-06-08 — Phase 1: core blocking engine MVP
 
 **Branch:** `phase1-core-engine` → merged to `main`. **State:** ✅ COMPLETE, verified on emulator.
