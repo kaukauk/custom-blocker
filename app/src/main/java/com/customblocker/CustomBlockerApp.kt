@@ -8,6 +8,7 @@ import com.customblocker.data.repo.BlockerRepository
 import com.customblocker.domain.engine.EngineSync
 import com.customblocker.service.conditions.SignalsCoordinator
 import com.customblocker.service.conditions.UsageTracker
+import com.customblocker.service.monitoring.WatchdogWorker
 import com.customblocker.service.pkg.PackageAddedReceiver
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -43,5 +44,8 @@ class CustomBlockerApp : Application() {
         // service. NOT_EXPORTED — we only receive the system broadcast.
         val pkgFilter = IntentFilter(Intent.ACTION_PACKAGE_ADDED).apply { addDataScheme("package") }
         registerReceiver(PackageAddedReceiver(entry.repository()), pkgFilter, Context.RECEIVER_NOT_EXPORTED)
+
+        // Reliability watchdog: periodically verify the accessibility service is still enabled.
+        WatchdogWorker.schedule(this)
     }
 }
