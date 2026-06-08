@@ -13,6 +13,31 @@ when/how-it-went. Git history is the source of truth for code; this log captures
 
 ---
 
+## 2026-06-08 — Phase 7: Statistics
+
+**Branch:** `phase7-statistics` → merged to `master` (`0b574f8`). **State:** ✅ COMPLETE, verified.
+
+**7-1 recording** (`27deb2f`): Room **v7** `daily_stats` — one row per (packageName, dateEpochDay)
+accumulating `usageSeconds`, `blockCount`, `notificationBlockCount` via SQLite **UPSERT-increment**
+(`ON CONFLICT(packageName,dateEpochDay) DO UPDATE`). `StatsRecorder` (fire-and-forget IO) is called
+from the a11y service — usage on each accrual (reusing the usage-limit seconds, one source of truth)
+and `recordBlock` in `enforceBlock`, **deduped via `lastBlockedPkg`** (reset on each new foreground
+entry) so the 3s ticker re-evaluations don't inflate counts — and from the notification listener on
+each suppression.
+
+**7-2/7-3 dashboard** (`5a83c44`): `BlockerDao.observeAppStats(from,to)` (SUM grouped by package over
+a day range) → repo passthrough → `StatsViewModel` (Today / 7-day range via flatMapLatest) →
+`StatsScreen`: range chips, summary cards (screen time / blocks / notifications hidden), per-app
+breakdown. Reached via a chart icon in the home top bar.
+
+**Verified:** opened apps + Chrome (blocked) → `daily_stats` showed launcher/settings usage seconds +
+Chrome blockCount=2 (two distinct foreground entries, no ticker inflation); the dashboard rendered
+"Screen time 25s / Blocks 2 / Notifs hidden 0" + per-app rows, with working day/week toggle.
+
+**Scope note (v1):** stats are per-app (screen-time, blocks, notifications). Host-level "most-blocked
+sites" and time-series charts are future niceties — website blocks are currently counted under the
+browser package.
+
 ## 2026-06-08 — Deferred-items sweep (Phase 4–6 follow-ups)
 
 **Branch:** `deferred-items` → merged to `master` (`4fa5dfe`). **State:** ✅ COMPLETE, all verified.
