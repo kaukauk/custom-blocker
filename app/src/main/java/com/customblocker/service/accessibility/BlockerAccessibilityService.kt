@@ -48,6 +48,7 @@ class BlockerAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         powerManager = getSystemService(PowerManager::class.java)
+        engine.selfPackage = packageName   // never block ourselves (can't lock the user out)
         L.d(L.FG, "accessibility service connected")
         // Mid-session ticker: accrue usage + re-evaluate the current app every few seconds.
         scope.launch {
@@ -63,7 +64,25 @@ class BlockerAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val pkg = event.packageName?.toString() ?: return
-        if (pkg == packageName) return
+        // Our own package: never act on it. Two sub-cases share this package:
+        //  - our overlay window appearing (className is a View, e.g. FrameLayout) — must be ignored,
+        //    else we'd hide the very block screen we just raised.
+        //  - the user actually opening our UI (an Activity) — dismiss any block screen and stop the
+        //    ticker so it can't keep ejecting us to home while a profile is edited.
+        if (pkg == packageName) {
+            val isOurActivity = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+                event.className?.toString().orEmpty().contains("Activity")
+            if (isOurActivity) {
+                if (pkg != lastForeground) {
+                    lastForeground = pkg
+                    accrueUsage()
+                    trackedPkg = null
+                    lastUrl = null
+                }
+                overlay.hide()
+            }
+            return
+        }
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {

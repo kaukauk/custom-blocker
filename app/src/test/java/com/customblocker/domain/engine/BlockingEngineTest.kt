@@ -158,6 +158,14 @@ class BlockingEngineTest {
         assertEquals(BlockDecision.Allow, engine(r).decide("com.android.systemui", ctx()))
     }
 
+    @Test fun neverBlocksSelf_evenInAllowlist() {
+        val r = rule(apps = setOf("com.foo"), mode = BlockingMode.ALLOWLIST, mask = ConditionTypes.CHARGER)
+        val e = engine(r).apply { selfPackage = "com.customblocker" }
+        assertEquals(BlockDecision.Allow, e.decide("com.customblocker", ctx(charging = true)))
+        // a different unlisted app is still blocked while active
+        assertTrue(blocked(e.decide(CHROME, ctx(charging = true))))
+    }
+
     @Test fun allowsNullOrBlank() {
         assertEquals(BlockDecision.Allow, engine(rule()).decide(null, ctx()))
         assertEquals(BlockDecision.Allow, engine(rule()).decide("  ", ctx()))

@@ -32,13 +32,23 @@ class BlockingEngine @Inject constructor() {
         "com.android.launcher3",
     )
 
+    /**
+     * Our own package — set once at startup. Never blocked in any mode (incl. allow-list), so the
+     * user can always reach the app to change or disable a profile and can't lock themselves out.
+     */
+    @Volatile
+    var selfPackage: String? = null
+
+    private fun isNeverBlocked(packageName: String): Boolean =
+        packageName in neverBlock || packageName == selfPackage
+
     fun update(newProfiles: List<ProfileRule>) {
         profiles = newProfiles
     }
 
     fun decide(packageName: String?, ctx: BlockContext): BlockDecision {
         if (packageName.isNullOrBlank()) return BlockDecision.Allow
-        if (packageName in neverBlock) return BlockDecision.Allow
+        if (isNeverBlocked(packageName)) return BlockDecision.Allow
 
         for (rule in profiles) {
             if (!ConditionEvaluator.isActive(rule, ctx)) continue
@@ -62,7 +72,7 @@ class BlockingEngine @Inject constructor() {
      */
     fun decideUrl(packageName: String?, url: String?, ctx: BlockContext): BlockDecision {
         if (packageName.isNullOrBlank()) return BlockDecision.Allow
-        if (packageName in neverBlock) return BlockDecision.Allow
+        if (isNeverBlocked(packageName)) return BlockDecision.Allow
 
         val readable = !url.isNullOrBlank()
         for (rule in profiles) {
