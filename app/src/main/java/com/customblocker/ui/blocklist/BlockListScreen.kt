@@ -42,6 +42,7 @@ import com.customblocker.ui.onboarding.rememberPermissionState
 fun BlockListScreen(
     onAddApps: () -> Unit,
     onOpenConditions: () -> Unit,
+    onOpenWebsites: () -> Unit,
     onBack: () -> Unit,
     viewModel: BlockListViewModel = hiltViewModel(),
 ) {
@@ -107,6 +108,11 @@ fun BlockListScreen(
                 item {
                     OutlinedButton(onClick = onOpenConditions, modifier = Modifier.fillMaxWidth()) {
                         Text("Conditions (when to block)")
+                    }
+                }
+                item {
+                    OutlinedButton(onClick = onOpenWebsites, modifier = Modifier.fillMaxWidth()) {
+                        Text("Websites & keywords")
                     }
                 }
                 item {
