@@ -69,7 +69,17 @@ data class ProfileRule(
     val websites: List<WebsiteRule> = emptyList(),
     /** Block the whole browser when its URL can't be read (PLAN.md §10). */
     val blockUnsupportedBrowsers: Boolean = false,
-)
+    /** Eject the user when a targeted app is launched/foregrounded. */
+    val blockLaunch: Boolean = true,
+    /** Suppress notifications from targeted apps while active. */
+    val blockNotifications: Boolean = false,
+) {
+    /** Whether this profile's mode + app set targets [packageName]. */
+    fun targets(packageName: String): Boolean = when (mode) {
+        BlockingMode.BLOCKLIST -> packageName in apps
+        BlockingMode.ALLOWLIST -> packageName !in apps
+    }
+}
 
 /** The live signals the engine evaluates a profile against at a moment in time. */
 data class BlockContext(

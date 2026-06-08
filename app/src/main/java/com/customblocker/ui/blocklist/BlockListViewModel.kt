@@ -20,6 +20,9 @@ data class BlockListUiState(
     val enabled: Boolean = false,
     val mode: BlockingMode = BlockingMode.BLOCKLIST,
     val apps: List<InstalledApp> = emptyList(),
+    val blockLaunch: Boolean = true,
+    val blockNotifications: Boolean = false,
+    val addNewApps: Boolean = false,
 )
 
 @HiltViewModel
@@ -38,10 +41,16 @@ class BlockListViewModel @Inject constructor(
                 enabled = profile?.enabled ?: false,
                 mode = if (profile?.blockingMode == 1) BlockingMode.ALLOWLIST else BlockingMode.BLOCKLIST,
                 apps = apps.map { InstalledApp(it.packageName, lister.label(it.packageName)) },
+                blockLaunch = profile?.blockLaunch ?: true,
+                blockNotifications = profile?.blockNotifications ?: false,
+                addNewApps = profile?.addNewApps ?: false,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BlockListUiState())
 
     fun setEnabled(enabled: Boolean) = viewModelScope.launch { repository.setEnabled(profileId, enabled) }
     fun setMode(mode: BlockingMode) = viewModelScope.launch { repository.setMode(profileId, mode) }
     fun removeApp(packageName: String) = viewModelScope.launch { repository.removeApp(profileId, packageName) }
+    fun setBlockLaunch(v: Boolean) = viewModelScope.launch { repository.setBlockLaunch(profileId, v) }
+    fun setBlockNotifications(v: Boolean) = viewModelScope.launch { repository.setBlockNotifications(profileId, v) }
+    fun setAddNewApps(v: Boolean) = viewModelScope.launch { repository.setAddNewApps(profileId, v) }
 }

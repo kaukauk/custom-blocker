@@ -76,6 +76,8 @@ class BlockerRepository @Inject constructor(
                 conditionsMask = p.conditionsMask,
                 dayFlags = p.dayFlags,
                 blockUnsupportedBrowsers = p.blockUnsupportedBrowsers,
+                blockLaunch = p.blockLaunch,
+                blockNotifications = p.blockNotifications,
                 timeWindows = intervals.filter { it.profileId == p.id }
                     .map { TimeWindow(it.fromMinuteOfDay, it.toMinuteOfDay) },
                 wifiSsids = wifi.filter { it.profileId == p.id }.map { it.ssid }.toSet(),
@@ -174,6 +176,19 @@ class BlockerRepository @Inject constructor(
 
     suspend fun setBlockUnsupportedBrowsers(profileId: Long, enabled: Boolean) =
         edit(profileId) { it.copy(blockUnsupportedBrowsers = enabled) }
+
+    suspend fun setBlockLaunch(profileId: Long, enabled: Boolean) =
+        edit(profileId) { it.copy(blockLaunch = enabled) }
+
+    suspend fun setBlockNotifications(profileId: Long, enabled: Boolean) =
+        edit(profileId) { it.copy(blockNotifications = enabled) }
+
+    suspend fun setAddNewApps(profileId: Long, enabled: Boolean) =
+        edit(profileId) { it.copy(addNewApps = enabled) }
+
+    /** Profiles flagged to auto-add new installs (used by PackageAddedReceiver). */
+    suspend fun profilesAutoAddingApps(): List<ProfileEntity> =
+        dao.getProfilesWithAddNewApps()
 
     // --- persisted usage counters (Phase 5 reliability) ---
     suspend fun loadUsageCounters(): List<UsageCounterEntity> = dao.getAllUsageCounters()
