@@ -246,22 +246,41 @@ private fun DeviceAdminCard(locked: Boolean, onUnlockNeeded: () -> Unit) {
 
 @Composable
 private fun TimerSetter(minutes: Int, onSet: (Int) -> Unit) {
-    var text by remember(minutes) { mutableStateOf(minutes.toString()) }
+    var days by remember(minutes) { mutableStateOf((minutes / 1440).toString()) }
+    var hours by remember(minutes) { mutableStateOf((minutes % 1440 / 60).toString()) }
+    var mins by remember(minutes) { mutableStateOf((minutes % 60).toString()) }
+    val total = (days.toIntOrNull() ?: 0) * 1440 + (hours.toIntOrNull() ?: 0) * 60 + (mins.toIntOrNull() ?: 0)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Countdown length", style = MaterialTheme.typography.titleSmall)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
-                    value = text,
-                    onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) text = it },
+                    value = days,
+                    onValueChange = { if (it.length <= 3 && it.all(Char::isDigit)) days = it },
+                    label = { Text("Days") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = hours,
+                    onValueChange = { if (it.length <= 2 && it.all(Char::isDigit)) hours = it },
+                    label = { Text("Hours") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = mins,
+                    onValueChange = { if (it.length <= 2 && it.all(Char::isDigit)) mins = it },
                     label = { Text("Minutes") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { text.toIntOrNull()?.let(onSet) }, enabled = text.toIntOrNull() != null) {
-                    Text("Save")
-                }
+            }
+            TextButton(onClick = { onSet(total) }, enabled = total > 0) {
+                Text("Save")
             }
         }
     }

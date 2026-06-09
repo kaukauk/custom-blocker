@@ -190,9 +190,16 @@ private fun TimerUnlock(minutes: Int, vm: LockViewModel, onUnlocked: () -> Unit,
         onDismissRequest = onDismiss,
         title = { Text("Wait to unlock") },
         text = {
-            val m = remaining / 60
+            val d = remaining / 86_400
+            val h = remaining % 86_400 / 3_600
+            val m = remaining % 3_600 / 60
             val s = remaining % 60
-            Text("Strict Mode unlocks in %d:%02d. Keep this open.".format(m, s))
+            val clock = when {
+                d > 0 -> "%dd %02d:%02d:%02d".format(d, h, m, s)
+                h > 0 -> "%d:%02d:%02d".format(h, m, s)
+                else -> "%d:%02d".format(m, s)
+            }
+            Text("Strict Mode unlocks in $clock. Keep this open.")
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
