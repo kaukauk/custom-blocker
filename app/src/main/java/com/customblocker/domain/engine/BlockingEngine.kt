@@ -39,8 +39,16 @@ class BlockingEngine @Inject constructor() {
     @Volatile
     var selfPackage: String? = null
 
+    /**
+     * System packages resolved at runtime that must never be blocked, even by an allow-list:
+     * the active IME(s) (keyboard) and the current home launcher. Without this an allow-list that
+     * omits the keyboard would block it, leaving the user unable to type. Set from the Android side.
+     */
+    @Volatile
+    var systemPackages: Set<String> = emptySet()
+
     private fun isNeverBlocked(packageName: String): Boolean =
-        packageName in neverBlock || packageName == selfPackage
+        packageName in neverBlock || packageName == selfPackage || packageName in systemPackages
 
     fun update(newProfiles: List<ProfileRule>) {
         profiles = newProfiles

@@ -115,7 +115,7 @@ fun ConditionsScreen(
                         }
                     }
                 }
-                items(state.intervals, key = { it.id }) { interval ->
+                items(state.intervals, key = { "time-${it.id}" }) { interval ->
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -141,7 +141,7 @@ fun ConditionsScreen(
                 )
             }
             if (mask and ConditionTypes.WIFI != 0) {
-                items(state.wifi, key = { it.id }) { net ->
+                items(state.wifi, key = { "wifi-${it.id}" }) { net ->
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -180,7 +180,7 @@ fun ConditionsScreen(
                 )
             }
             if (mask and ConditionTypes.LOCATION != 0) {
-                items(state.geofences, key = { it.id }) { geo ->
+                items(state.geofences, key = { "geo-${it.id}" }) { geo ->
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,

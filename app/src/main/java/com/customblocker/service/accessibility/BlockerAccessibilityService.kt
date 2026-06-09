@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
+import android.view.inputmethod.InputMethodManager
 import com.customblocker.data.prefs.StrictModeConfig
 import com.customblocker.data.prefs.StrictModeStore
 import com.customblocker.data.stats.StatsRecorder
@@ -78,6 +79,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         powerManager = getSystemService(PowerManager::class.java)
         engine.selfPackage = packageName   // never block ourselves (can't lock the user out)
+        engine.systemPackages = resolveSystemPackages()  // keyboard(s) + launcher: never block
         promoteToForeground()
         registerReceiver(
             reevalReceiver,
@@ -204,6 +206,21 @@ class BlockerAccessibilityService : AccessibilityService() {
                 .addCategory(Intent.CATEGORY_HOME)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
+    }
+
+    /**
+     * Resolve the packages we must never block on top of the static set: every enabled IME (so an
+     * allow-list can't block the keyboard the user types with) and the current home launcher.
+     */
+    private fun resolveSystemPackages(): Set<String> {
+        val pkgs = mutableSetOf<String>()
+        getSystemService(InputMethodManager::class.java)?.enabledInputMethodList?.forEach {
+            pkgs += it.packageName
+        }
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        packageManager.resolveActivity(home, 0)?.activityInfo?.packageName?.let { pkgs += it }
+        L.d(L.FG, "system never-block: $pkgs")
+        return pkgs
     }
 
     /**
