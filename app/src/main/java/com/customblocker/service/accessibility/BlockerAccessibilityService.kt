@@ -51,6 +51,7 @@ class BlockerAccessibilityService : AccessibilityService() {
     @Inject lateinit var unlockManager: UnlockManager
     @Inject lateinit var timeBoundaryScheduler: TimeBoundaryScheduler
     @Inject lateinit var statsRecorder: StatsRecorder
+    @Inject lateinit var settingsGate: SettingsAccessGate
 
     /** Fired by [TimeBoundaryScheduler] at a TIME window edge: re-evaluate now + reschedule. */
     private val reevalReceiver = object : BroadcastReceiver() {
@@ -139,15 +140,14 @@ class BlockerAccessibilityService : AccessibilityService() {
                     else strictConfig.enabled && !unlockManager.unlocked.value
                 if (strictlyLocked && strictConfig.level >= 3 && pkg in SettingsGuard.GUARDED_PACKAGES) {
                     L.d(L.ENGINE, "STRICT L3 settings: pkg=$pkg titles=${event.text}")
-                    if (SettingsGuard.shouldBlock(pkg, event.text)) {
-                        enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
-                        return
-                    }
+                    if (guardSettings(pkg, event.text)) return
                 }
                 if (pkg != lastForeground) {
                     lastForeground = pkg
                     lastUrl = null
                     lastBlockedPkg = null         // new foreground entry → a fresh block can count
+                    // Left the Settings app → end any allowed-settings permit.
+                    if (pkg != SettingsGuard.SETTINGS_PKG) settingsGate.clear()
 
                     accrueUsage()                 // finalize the previous app's foreground time
                     trackedPkg = pkg
@@ -221,6 +221,45 @@ class BlockerAccessibilityService : AccessibilityService() {
             Intent(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_HOME)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
+    /**
+     * L3 Settings/installer handling. Returns true if it acted (caller should stop processing).
+     *  - Installer screens: ejected to home outright.
+     *  - Settings while no permit is held: replaced with the Allowed Settings launcher.
+     *  - Settings while permitted: allowed to stay, except dangerous (tamper) screens which clear the
+     *    permit and bounce back to the launcher. Safe screens refresh the permit so it doesn't lapse.
+     */
+    private fun guardSettings(pkg: String, titles: List<CharSequence>): Boolean {
+        if (SettingsGuard.isInstaller(pkg)) {
+            enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
+            return true
+        }
+        val now = System.currentTimeMillis()
+        if (!settingsGate.isPermitted(now)) {
+            showAllowedSettings(pkg)
+            return true
+        }
+        if (SettingsGuard.isDangerous(titles)) {
+            settingsGate.clear()
+            showAllowedSettings(pkg)
+            return true
+        }
+        settingsGate.touch(now)   // safe screen — keep the permit alive
+        return false
+    }
+
+    /** Eject the real Settings app and present our curated Allowed Settings launcher instead. */
+    private fun showAllowedSettings(pkg: String) {
+        if (pkg != lastBlockedPkg) {
+            statsRecorder.recordBlock(pkg)
+            lastBlockedPkg = pkg
+        }
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        startActivity(
+            Intent(this, com.customblocker.ui.settings.AllowedSettingsActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
         )
     }
 

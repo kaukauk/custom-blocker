@@ -44,6 +44,14 @@
             android:launchMode="singleTask"
             android:theme="@style/Theme.CustomBlocker" />
 
+        <!-- Allowed Settings launcher: shown in place of the device Settings app under Strict L3. -->
+        <activity
+            android:name=".ui.settings.AllowedSettingsActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.CustomBlocker" />
+
         <service
             android:name=".service.accessibility.BlockerAccessibilityService"
             android:exported="false"

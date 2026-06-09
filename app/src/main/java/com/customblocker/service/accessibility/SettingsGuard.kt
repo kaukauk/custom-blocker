@@ -1,20 +1,24 @@
 package com.customblocker.service.accessibility
 
+import android.provider.Settings
+
 /**
  * Strict Mode L3 anti-tamper (PLAN.md §11), scoped to Pixel/AOSP. While L3 is active and locked, we
- * eject from the screens a user would use to undo blocking:
+ * keep the user out of the screens they'd use to undo blocking:
  *  - the device **Settings** app (disable accessibility, force-stop, remove device admin), and
  *  - the **package installer** (uninstall / permission screens) — defence-in-depth alongside the L2
  *    device-admin uninstall block.
  *
- * The package installer is blocked outright. Settings is *mostly* blocked, but a small whitelist of
- * harmless leaf screens (Wi-Fi, Bluetooth, Language & input, …) and the Settings home are allowed so
- * the user can still toggle connectivity. We match on the screen **title** carried in the
- * TYPE_WINDOW_STATE_CHANGED event's text (AOSP fires generic `FrameLayout` classNames, so a
- * className whitelist can't work — but the event text reliably carries the toolbar title).
+ * The installer is blocked outright. Settings is gated through an "Allowed Settings" launcher
+ * ([com.customblocker.ui.settings.AllowedSettingsActivity]): opening Settings while locked pops that
+ * menu instead of the real app, and tapping an allowed shortcut deep-links into the real screen and
+ * opens a short permit ([SettingsAccessGate]) so the user isn't ejected while they're in there.
  *
- * Allowing the Settings home is safe: navigating from it to a dangerous leaf (Apps, Accessibility,
- * Security, …) lands on a screen whose title is NOT whitelisted, so that leaf is ejected.
+ * We can't reliably whitelist *which* Settings screen is showing (AOSP fires generic `FrameLayout`
+ * classNames and locale-dependent titles), so the permit — not title-matching — is what keeps the
+ * allowed screen usable. Title-matching survives only as a [isDangerous] backstop: even while
+ * permitted, screens that can disable the blocker (Accessibility, Apps/force-stop, Device admin,
+ * Security, Developer options, Reset, Date & time) eject the user back to the menu.
  */
 object SettingsGuard {
 
@@ -28,15 +32,36 @@ object SettingsGuard {
         "com.android.permissioncontroller",
     )
 
-    /** Always-blocked tamper surfaces (no safe screens to whitelist here). */
-    private val INSTALLER_PACKAGES = GUARDED_PACKAGES - SETTINGS_PKG
+    fun isInstaller(packageName: String): Boolean =
+        packageName != SETTINGS_PKG && packageName in GUARDED_PACKAGES
 
-    /** Settings home titles — allowed so the user can navigate to the whitelisted leaves. */
-    private val HOME_TITLES = setOf("settings", "search settings")
+    /**
+     * The curated shortcuts shown in the Allowed Settings launcher. [action] is a documented
+     * `Settings.ACTION_*` intent that deep-links straight to the screen, bypassing the (blocked)
+     * Settings home.
+     */
+    enum class AllowedShortcut(val label: String, val action: String) {
+        WIFI("Wi-Fi & internet", Settings.ACTION_WIFI_SETTINGS),
+        BLUETOOTH("Bluetooth", Settings.ACTION_BLUETOOTH_SETTINGS),
+        LANGUAGE("Language & input", Settings.ACTION_LOCALE_SETTINGS),
+        SOUND("Sound & vibration", Settings.ACTION_SOUND_SETTINGS),
+    }
 
-    /** Substrings (in a normalized title) that mark a Settings leaf the user is allowed to reach. */
-    private val ALLOWED_SUBSTRINGS = listOf(
-        "wi-fi", "wifi", "bluetooth", "language", "input", "sound", "vibration",
+    /**
+     * Screens that can be used to disable the blocker — ejected even while a permit is held. Matched
+     * as normalized-title substrings; deliberately broad since the cost of a false positive (bounce
+     * to the menu) is low and the cost of a miss (escape) defeats Strict Mode.
+     */
+    private val DANGEROUS_SUBSTRINGS = listOf(
+        "accessibility",
+        "app info", "app details", "all apps", "installed apps", "manage apps",
+        "device admin",
+        "security", "encrypt",
+        "developer option",
+        "reset", "erase",
+        "date & time", "date and time",
+        "fingerprint", "face", "biometric",
+        "lock screen", "screen lock",
     )
 
     /** Lowercase, collapse the various unicode hyphens AOSP uses ("Wi‑Fi") to a plain '-'. */
@@ -44,16 +69,11 @@ object SettingsGuard {
         s.toString().lowercase().replace('‑', '-').replace('–', '-').trim()
 
     /**
-     * True if this Settings/installer screen should be ejected under L3. [titles] is the event text
-     * (screen title(s)); an installer is always blocked, Settings is blocked unless a title is the
-     * home or a whitelisted leaf.
+     * True if the current Settings screen is a tamper surface that must eject the user even while a
+     * permit is held. [titles] is the window-state-changed event text.
      */
-    fun shouldBlock(packageName: String, titles: List<CharSequence>): Boolean {
-        if (packageName in INSTALLER_PACKAGES) return true
-        if (packageName != SETTINGS_PKG) return false
+    fun isDangerous(titles: List<CharSequence>): Boolean {
         val norm = titles.map(::normalize).filter { it.isNotEmpty() }
-        if (norm.isEmpty()) return true                                   // unknown screen → block
-        if (norm.any { it in HOME_TITLES }) return false                  // allow the home
-        return norm.none { t -> ALLOWED_SUBSTRINGS.any { t.contains(it) } }
+        return norm.any { t -> DANGEROUS_SUBSTRINGS.any { t.contains(it) } }
     }
 }
