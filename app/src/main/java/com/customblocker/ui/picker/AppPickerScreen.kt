@@ -37,6 +37,8 @@ fun AppPickerScreen(
     val apps by viewModel.visibleApps.collectAsStateWithLifecycle()
     val selected by viewModel.selected.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
+    val editLocked by viewModel.editLocked.collectAsStateWithLifecycle()
+    val allowlist by viewModel.isAllowlist.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -61,16 +63,19 @@ fun AppPickerScreen(
             LazyColumn(Modifier.fillMaxSize()) {
                 items(apps, key = { it.packageName }) { app ->
                     val isSelected = app.packageName in selected
+                    // Locked: blocklist may only add (check); allowlist may only remove (uncheck).
+                    val rowEnabled = !editLocked || (isSelected == allowlist)
                     androidx.compose.foundation.layout.Row(
                         Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.toggle(app.packageName, add = !isSelected) }
+                            .clickable(enabled = rowEnabled) { viewModel.toggle(app.packageName, add = !isSelected) }
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(
                             checked = isSelected,
+                            enabled = rowEnabled,
                             onCheckedChange = { viewModel.toggle(app.packageName, add = it) },
                         )
                         Column(Modifier.weight(1f)) {

@@ -59,6 +59,9 @@ fun BlockListScreen(
     val (accessibilityOn, overlayOn) = perms
     val lock by lockViewModel.state.collectAsStateWithLifecycle()
     val locked = lock.locked
+    // editLocked = strict lock OR this profile is currently active; gates restrictiveness-lowering edits.
+    val editLocked by viewModel.editLocked.collectAsStateWithLifecycle()
+    val allowlist = state.mode == BlockingMode.ALLOWLIST
     var showUnlock by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val earnUnlock = com.customblocker.ui.strict.rememberEarnUnlockLauncher(lock.config)
@@ -85,7 +88,9 @@ fun BlockListScreen(
             )
         },
         floatingActionButton = {
-            if (!locked) {
+            // Adding apps raises restrictiveness for a blocklist (ok even when locked) but lowers it
+            // for an allowlist (blocked when locked).
+            if (!editLocked || !allowlist) {
                 FloatingActionButton(onClick = onAddApps) {
                     Icon(Icons.Default.Add, contentDescription = "Add apps")
                 }
@@ -124,8 +129,9 @@ fun BlockListScreen(
                         }
                         Switch(
                             checked = state.enabled,
-                            onCheckedChange = { if (locked) showUnlock = true else viewModel.setEnabled(it) },
-                            enabled = !locked,
+                            // Can switch a profile on while locked, but not off.
+                            onCheckedChange = { viewModel.setEnabled(it) },
+                            enabled = !(editLocked && state.enabled),
                         )
                     }
                 }
@@ -135,13 +141,13 @@ fun BlockListScreen(
                             selected = state.mode == BlockingMode.BLOCKLIST,
                             onClick = { viewModel.setMode(BlockingMode.BLOCKLIST) },
                             label = { Text("Block list") },
-                            enabled = !locked,
+                            enabled = !editLocked,
                         )
                         FilterChip(
                             selected = state.mode == BlockingMode.ALLOWLIST,
                             onClick = { viewModel.setMode(BlockingMode.ALLOWLIST) },
                             label = { Text("Allow list") },
-                            enabled = !locked,
+                            enabled = !editLocked,
                         )
                     }
                 }
@@ -164,7 +170,7 @@ fun BlockListScreen(
                         title = "Block launching",
                         subtitle = "Eject when a blocked app is opened.",
                         checked = state.blockLaunch,
-                        enabled = !locked,
+                        enabled = !(editLocked && state.blockLaunch),
                         onCheckedChange = viewModel::setBlockLaunch,
                     )
                 }
@@ -173,7 +179,7 @@ fun BlockListScreen(
                         title = "Block notifications",
                         subtitle = "Silently dismiss notifications from blocked apps (needs notification access).",
                         checked = state.blockNotifications,
-                        enabled = !locked,
+                        enabled = !(editLocked && state.blockNotifications),
                         onCheckedChange = viewModel::setBlockNotifications,
                     )
                 }
@@ -190,7 +196,7 @@ fun BlockListScreen(
                         title = "Auto-block new apps",
                         subtitle = "Add newly-installed apps to this profile automatically.",
                         checked = state.addNewApps,
-                        enabled = !locked,
+                        enabled = !(editLocked && state.addNewApps),
                         onCheckedChange = viewModel::setAddNewApps,
                     )
                 }
@@ -225,7 +231,12 @@ fun BlockListScreen(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            IconButton(onClick = { viewModel.removeApp(app.packageName) }, enabled = !locked) {
+                            // Removing lowers a blocklist's restrictiveness (blocked when locked) but
+                            // raises an allowlist's (always allowed).
+                            IconButton(
+                                onClick = { viewModel.removeApp(app.packageName) },
+                                enabled = !editLocked || allowlist,
+                            ) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove")
                             }
                         }

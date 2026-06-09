@@ -60,6 +60,7 @@ fun ProfileListScreen(
     var showCreate by remember { mutableStateOf(false) }
     val lock by lockViewModel.state.collectAsStateWithLifecycle()
     val locked = lock.locked
+    val lockInfo by viewModel.lockInfo.collectAsStateWithLifecycle()
     var showUnlock by remember { mutableStateOf(false) }
     val earnUnlock = com.customblocker.ui.strict.rememberEarnUnlockLauncher(lock.config)
 
@@ -112,6 +113,7 @@ fun ProfileListScreen(
                 item { Text("No profiles yet — tap + to create one.", style = MaterialTheme.typography.bodyMedium) }
             }
             items(profiles, key = { it.id }) { profile ->
+                val pLocked = lockInfo.locked(profile.id)
                 Card(Modifier.fillMaxWidth().clickable { onOpenProfile(profile.id) }) {
                     Row(
                         Modifier.fillMaxWidth().padding(16.dp),
@@ -130,12 +132,13 @@ fun ProfileListScreen(
                         }
                         Switch(
                             checked = profile.enabled,
-                            onCheckedChange = { if (locked) showUnlock = true else viewModel.setEnabled(profile.id, it) },
-                            enabled = !locked,
+                            // Can enable a profile while locked, but not disable it.
+                            onCheckedChange = { viewModel.setEnabled(profile.id, it) },
+                            enabled = !(pLocked && profile.enabled),
                         )
                         IconButton(
-                            onClick = { if (locked) showUnlock = true else viewModel.deleteProfile(profile.id) },
-                            enabled = !locked,
+                            onClick = { viewModel.deleteProfile(profile.id) },
+                            enabled = !pLocked,
                         ) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete profile")
                         }

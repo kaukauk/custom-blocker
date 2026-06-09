@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.customblocker.data.repo.BlockerRepository
 import com.customblocker.domain.engine.BlockingMode
+import com.customblocker.domain.strict.ProfileLockState
 import com.customblocker.ui.AppLister
 import com.customblocker.ui.InstalledApp
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,10 +30,18 @@ data class BlockListUiState(
 class BlockListViewModel @Inject constructor(
     private val repository: BlockerRepository,
     private val lister: AppLister,
+    profileLockState: ProfileLockState,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     val profileId: Long = savedStateHandle.get<Long>("profileId") ?: 0L
+
+    /** While locked, only restrictiveness-increasing edits are allowed (mode-dependent for apps). */
+    val editLocked: StateFlow<Boolean> = profileLockState.editLocked(profileId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    private val locked get() = editLocked.value
+    private val isAllowlist get() = state.value.mode == BlockingMode.ALLOWLIST
 
     val state: StateFlow<BlockListUiState> =
         combine(repository.observeProfile(profileId), repository.observeApps(profileId)) { profile, apps ->
@@ -47,10 +56,35 @@ class BlockListViewModel @Inject constructor(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BlockListUiState())
 
-    fun setEnabled(enabled: Boolean) = viewModelScope.launch { repository.setEnabled(profileId, enabled) }
-    fun setMode(mode: BlockingMode) = viewModelScope.launch { repository.setMode(profileId, mode) }
-    fun removeApp(packageName: String) = viewModelScope.launch { repository.removeApp(profileId, packageName) }
-    fun setBlockLaunch(v: Boolean) = viewModelScope.launch { repository.setBlockLaunch(profileId, v) }
-    fun setBlockNotifications(v: Boolean) = viewModelScope.launch { repository.setBlockNotifications(profileId, v) }
-    fun setAddNewApps(v: Boolean) = viewModelScope.launch { repository.setAddNewApps(profileId, v) }
+    // Locked: can enable a profile (more blocking) but not disable it.
+    fun setEnabled(enabled: Boolean) = viewModelScope.launch {
+        if (locked && !enabled) return@launch
+        repository.setEnabled(profileId, enabled)
+    }
+
+    // Locked: mode is frozen (switching block/allow list can lower restrictiveness).
+    fun setMode(mode: BlockingMode) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.setMode(profileId, mode)
+    }
+
+    // Locked: blocklist removals lower restrictiveness (blocked); allowlist removals raise it (ok).
+    fun removeApp(packageName: String) = viewModelScope.launch {
+        if (locked && !isAllowlist) return@launch
+        repository.removeApp(profileId, packageName)
+    }
+
+    // Locked behaviour toggles: can turn ON (more restrictive), can't turn OFF.
+    fun setBlockLaunch(v: Boolean) = viewModelScope.launch {
+        if (locked && !v) return@launch
+        repository.setBlockLaunch(profileId, v)
+    }
+    fun setBlockNotifications(v: Boolean) = viewModelScope.launch {
+        if (locked && !v) return@launch
+        repository.setBlockNotifications(profileId, v)
+    }
+    fun setAddNewApps(v: Boolean) = viewModelScope.launch {
+        if (locked && !v) return@launch
+        repository.setAddNewApps(profileId, v)
+    }
 }

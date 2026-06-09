@@ -8,6 +8,7 @@ import com.customblocker.data.db.TimeIntervalEntity
 import com.customblocker.data.db.WifiNetworkEntity
 import com.customblocker.data.repo.BlockerRepository
 import com.customblocker.domain.engine.ConditionTypes
+import com.customblocker.domain.strict.ProfileLockState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,10 +32,17 @@ data class ConditionsUiState(
 @HiltViewModel
 class ConditionsViewModel @Inject constructor(
     private val repository: BlockerRepository,
+    profileLockState: ProfileLockState,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val profileId: Long = savedStateHandle.get<Long>("profileId") ?: 0L
+
+    /** While locked, conditions are frozen (only limit amounts may be decreased). */
+    val editLocked: StateFlow<Boolean> = profileLockState.editLocked(profileId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    private val locked get() = editLocked.value
 
     val state: StateFlow<ConditionsUiState> = combine(
         repository.observeProfile(profileId),
@@ -58,39 +66,67 @@ class ConditionsViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConditionsUiState())
 
-    fun setConditionEnabled(bit: Int, enabled: Boolean) =
-        viewModelScope.launch { repository.setConditionEnabled(profileId, bit, enabled) }
+    fun setConditionEnabled(bit: Int, enabled: Boolean) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.setConditionEnabled(profileId, bit, enabled)
+    }
 
     fun toggleDay(dayBit: Int) = viewModelScope.launch {
+        if (locked) return@launch
         repository.setDayFlags(profileId, state.value.dayFlags xor dayBit)
     }
 
-    fun addTimeWindow(fromMinute: Int, toMinute: Int) =
-        viewModelScope.launch { repository.addTimeWindow(profileId, fromMinute, toMinute) }
-
-    fun removeInterval(id: Long) = viewModelScope.launch { repository.removeInterval(id) }
-
-    fun addWifi(ssid: String) = viewModelScope.launch {
-        if (ssid.isNotBlank()) repository.addWifi(profileId, ssid.trim())
+    fun addTimeWindow(fromMinute: Int, toMinute: Int) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.addTimeWindow(profileId, fromMinute, toMinute)
     }
 
-    fun removeWifi(id: Long) = viewModelScope.launch { repository.removeWifi(id) }
+    fun removeInterval(id: Long) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.removeInterval(id)
+    }
 
-    fun removeGeo(id: Long) = viewModelScope.launch { repository.removeGeo(id) }
+    fun addWifi(ssid: String) = viewModelScope.launch {
+        if (locked || ssid.isBlank()) return@launch
+        repository.addWifi(profileId, ssid.trim())
+    }
+
+    fun removeWifi(id: Long) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.removeWifi(id)
+    }
+
+    fun removeGeo(id: Long) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.removeGeo(id)
+    }
 
     fun toggleUsage(enabled: Boolean) = viewModelScope.launch {
+        if (locked) return@launch
         repository.setConditionEnabled(profileId, ConditionTypes.USAGE_LIMIT, enabled)
         if (enabled && state.value.usageMinutes == null) repository.setUsageLimit(profileId, 15, true)
     }
 
-    fun setUsageLimit(minutes: Int, daily: Boolean) =
-        viewModelScope.launch { repository.setUsageLimit(profileId, minutes, daily) }
+    fun setUsageLimit(minutes: Int, daily: Boolean) = viewModelScope.launch {
+        // Locked: only a decrease of the amount is allowed (more restrictive); period stays put.
+        if (locked) {
+            val cur = state.value.usageMinutes ?: return@launch
+            if (minutes >= cur || daily != state.value.usageDaily) return@launch
+        }
+        repository.setUsageLimit(profileId, minutes, daily)
+    }
 
     fun toggleLaunch(enabled: Boolean) = viewModelScope.launch {
+        if (locked) return@launch
         repository.setConditionEnabled(profileId, ConditionTypes.LAUNCH_COUNT, enabled)
         if (enabled && state.value.launchCount == null) repository.setLaunchLimit(profileId, 5, true)
     }
 
-    fun setLaunchLimit(count: Int, daily: Boolean) =
-        viewModelScope.launch { repository.setLaunchLimit(profileId, count, daily) }
+    fun setLaunchLimit(count: Int, daily: Boolean) = viewModelScope.launch {
+        if (locked) {
+            val cur = state.value.launchCount ?: return@launch
+            if (count >= cur || daily != state.value.launchDaily) return@launch
+        }
+        repository.setLaunchLimit(profileId, count, daily)
+    }
 }

@@ -63,6 +63,7 @@ fun ConditionsScreen(
     viewModel: ConditionsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val locked by viewModel.editLocked.collectAsStateWithLifecycle()
     val mask = state.conditionsMask
 
     // 0 = closed, 1 = picking start, 2 = picking end
@@ -94,6 +95,16 @@ fun ConditionsScreen(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            if (locked) {
+                item {
+                    Text(
+                        "Locked: this profile is active or Strict Mode is on, so conditions are frozen. " +
+                            "You can only lower a usage/launch limit (to block sooner).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
 
             // --- TIME ---
             item {
@@ -101,6 +112,7 @@ fun ConditionsScreen(
                     title = "Time",
                     enabled = mask and ConditionTypes.TIME != 0,
                     onToggle = { viewModel.setConditionEnabled(ConditionTypes.TIME, it) },
+                    toggleEnabled = !locked,
                 )
             }
             if (mask and ConditionTypes.TIME != 0) {
@@ -111,6 +123,7 @@ fun ConditionsScreen(
                                 selected = state.dayFlags and bit != 0,
                                 onClick = { viewModel.toggleDay(bit) },
                                 label = { Text(label) },
+                                enabled = !locked,
                             )
                         }
                     }
@@ -122,13 +135,13 @@ fun ConditionsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("${hhmm(interval.fromMinuteOfDay)} – ${hhmm(interval.toMinuteOfDay)}")
-                        IconButton(onClick = { viewModel.removeInterval(interval.id) }) {
+                        IconButton(onClick = { viewModel.removeInterval(interval.id) }, enabled = !locked) {
                             Icon(Icons.Default.Delete, contentDescription = "Remove window")
                         }
                     }
                 }
                 item {
-                    OutlinedButton(onClick = { pickerStage = 1 }) { Text("Add time window") }
+                    OutlinedButton(onClick = { pickerStage = 1 }, enabled = !locked) { Text("Add time window") }
                 }
             }
 
@@ -138,6 +151,7 @@ fun ConditionsScreen(
                     title = "Wi-Fi network",
                     enabled = mask and ConditionTypes.WIFI != 0,
                     onToggle = { viewModel.setConditionEnabled(ConditionTypes.WIFI, it) },
+                    toggleEnabled = !locked,
                 )
             }
             if (mask and ConditionTypes.WIFI != 0) {
@@ -148,7 +162,7 @@ fun ConditionsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(net.ssid)
-                        IconButton(onClick = { viewModel.removeWifi(net.id) }) {
+                        IconButton(onClick = { viewModel.removeWifi(net.id) }, enabled = !locked) {
                             Icon(Icons.Default.Delete, contentDescription = "Remove network")
                         }
                     }
@@ -164,9 +178,10 @@ fun ConditionsScreen(
                             onValueChange = { newSsid = it },
                             label = { Text("SSID") },
                             singleLine = true,
+                            enabled = !locked,
                             modifier = Modifier.weight(1f),
                         )
-                        Button(onClick = { viewModel.addWifi(newSsid); newSsid = "" }) { Text("Add") }
+                        Button(onClick = { viewModel.addWifi(newSsid); newSsid = "" }, enabled = !locked) { Text("Add") }
                     }
                 }
             }
@@ -177,6 +192,7 @@ fun ConditionsScreen(
                     title = "Location",
                     enabled = mask and ConditionTypes.LOCATION != 0,
                     onToggle = { viewModel.setConditionEnabled(ConditionTypes.LOCATION, it) },
+                    toggleEnabled = !locked,
                 )
             }
             if (mask and ConditionTypes.LOCATION != 0) {
@@ -193,13 +209,13 @@ fun ConditionsScreen(
                             ),
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                        IconButton(onClick = { viewModel.removeGeo(geo.id) }) {
+                        IconButton(onClick = { viewModel.removeGeo(geo.id) }, enabled = !locked) {
                             Icon(Icons.Default.Delete, contentDescription = "Remove location")
                         }
                     }
                 }
                 item {
-                    OutlinedButton(onClick = onAddLocation) { Text("Add location") }
+                    OutlinedButton(onClick = onAddLocation, enabled = !locked) { Text("Add location") }
                 }
             }
 
@@ -209,6 +225,7 @@ fun ConditionsScreen(
                     title = "Usage time limit",
                     enabled = mask and ConditionTypes.USAGE_LIMIT != 0,
                     onToggle = { viewModel.toggleUsage(it) },
+                    toggleEnabled = !locked,
                 )
             }
             if (mask and ConditionTypes.USAGE_LIMIT != 0) {
@@ -219,6 +236,7 @@ fun ConditionsScreen(
                         daily = state.usageDaily,
                         onValue = { viewModel.setUsageLimit(it, state.usageDaily) },
                         onPeriod = { viewModel.setUsageLimit(state.usageMinutes ?: 15, it) },
+                        locked = locked,
                     )
                 }
             }
@@ -229,6 +247,7 @@ fun ConditionsScreen(
                     title = "Launch count limit",
                     enabled = mask and ConditionTypes.LAUNCH_COUNT != 0,
                     onToggle = { viewModel.toggleLaunch(it) },
+                    toggleEnabled = !locked,
                 )
             }
             if (mask and ConditionTypes.LAUNCH_COUNT != 0) {
@@ -239,6 +258,7 @@ fun ConditionsScreen(
                         daily = state.launchDaily,
                         onValue = { viewModel.setLaunchLimit(it, state.launchDaily) },
                         onPeriod = { viewModel.setLaunchLimit(state.launchCount ?: 5, it) },
+                        locked = locked,
                     )
                 }
             }
@@ -249,6 +269,7 @@ fun ConditionsScreen(
                     title = "Only when charging",
                     enabled = mask and ConditionTypes.CHARGER != 0,
                     onToggle = { viewModel.setConditionEnabled(ConditionTypes.CHARGER, it) },
+                    toggleEnabled = !locked,
                 )
             }
         }
@@ -284,6 +305,7 @@ private fun LimitEditor(
     daily: Boolean,
     onValue: (Int) -> Unit,
     onPeriod: (Boolean) -> Unit,
+    locked: Boolean = false,
 ) {
     var text by remember(value) { mutableStateOf(value.toString()) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -295,7 +317,8 @@ private fun LimitEditor(
                 value = text,
                 onValueChange = {
                     text = it.filter(Char::isDigit).take(4)
-                    text.toIntOrNull()?.let { n -> if (n > 0) onValue(n) }
+                    // Locked: only accept a decrease (block sooner), never an increase.
+                    text.toIntOrNull()?.let { n -> if (n > 0 && (!locked || n < value)) onValue(n) }
                 },
                 label = { Text(unitLabel) },
                 singleLine = true,
@@ -304,20 +327,25 @@ private fun LimitEditor(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = daily, onClick = { onPeriod(true) }, label = { Text("Per day") })
-            FilterChip(selected = !daily, onClick = { onPeriod(false) }, label = { Text("Per hour") })
+            FilterChip(selected = daily, onClick = { onPeriod(true) }, label = { Text("Per day") }, enabled = !locked)
+            FilterChip(selected = !daily, onClick = { onPeriod(false) }, label = { Text("Per hour") }, enabled = !locked)
         }
     }
 }
 
 @Composable
-private fun SectionHeader(title: String, enabled: Boolean, onToggle: (Boolean) -> Unit) {
+private fun SectionHeader(
+    title: String,
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    toggleEnabled: Boolean = true,
+) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = MaterialTheme.typography.titleMedium)
-        Switch(checked = enabled, onCheckedChange = onToggle)
+        Switch(checked = enabled, onCheckedChange = onToggle, enabled = toggleEnabled)
     }
 }
