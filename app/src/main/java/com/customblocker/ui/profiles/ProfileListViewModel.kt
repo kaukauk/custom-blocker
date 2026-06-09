@@ -25,7 +25,7 @@ class ProfileListViewModel @Inject constructor(
     /** Per-profile lock info: a profile is edit-locked when Strict Mode is on or it's active. */
     val lockInfo: StateFlow<ProfileLockState.LockInfo> =
         profileLockState.lockInfo()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileLockState.LockInfo(false, emptySet()))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileLockState.LockInfo(false))
 
     /** Creates a profile and returns its id to the caller (to navigate into it). */
     fun createProfile(title: String, onCreated: (Long) -> Unit) = viewModelScope.launch {
