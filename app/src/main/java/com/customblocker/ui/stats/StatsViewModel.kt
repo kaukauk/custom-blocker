@@ -3,6 +3,7 @@ package com.customblocker.ui.stats
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.customblocker.data.db.AppStat
+import com.customblocker.data.prefs.StatsPrefsStore
 import com.customblocker.data.repo.BlockerRepository
 import com.customblocker.ui.AppLister
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -10,9 +11,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -32,12 +34,15 @@ data class StatsUiState(
     val totalBlocks: Int = 0,
     val totalNotificationBlocks: Int = 0,
     val rows: List<StatRow> = emptyList(),
+    /** Apps the user has excluded from stats — shown collapsed so they can be restored. */
+    val ignored: List<StatRow> = emptyList(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class StatsViewModel @Inject constructor(
     private val repository: BlockerRepository,
+    private val statsPrefs: StatsPrefsStore,
     private val lister: AppLister,
 ) : ViewModel() {
 
@@ -47,18 +52,29 @@ class StatsViewModel @Inject constructor(
         range.flatMapLatest { r ->
             val today = LocalDate.now().toEpochDay()
             val from = today - (r.days - 1)
-            repository.observeAppStats(from, today).map { stats -> toUiState(r, stats) }
+            combine(repository.observeAppStats(from, today), statsPrefs.ignored) { stats, ignored ->
+                toUiState(r, stats, ignored)
+            }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatsUiState())
 
     fun setRange(r: StatsRange) { range.value = r }
 
-    private fun toUiState(r: StatsRange, stats: List<AppStat>): StatsUiState = StatsUiState(
-        range = r,
-        totalUsageSeconds = stats.sumOf { it.usageSeconds },
-        totalBlocks = stats.sumOf { it.blockCount },
-        totalNotificationBlocks = stats.sumOf { it.notificationBlockCount },
-        rows = stats.map {
-            StatRow(it.packageName, lister.label(it.packageName), it.usageSeconds, it.blockCount, it.notificationBlockCount)
-        },
-    )
+    fun ignore(packageName: String) = viewModelScope.launch { statsPrefs.ignore(packageName) }
+    fun restore(packageName: String) = viewModelScope.launch { statsPrefs.unignore(packageName) }
+
+    private fun toUiState(r: StatsRange, stats: List<AppStat>, ignored: Set<String>): StatsUiState {
+        val visible = stats.filter { it.packageName !in ignored }
+        return StatsUiState(
+            range = r,
+            // Totals reflect only what's shown — ignored apps shouldn't inflate screen time/blocks.
+            totalUsageSeconds = visible.sumOf { it.usageSeconds },
+            totalBlocks = visible.sumOf { it.blockCount },
+            totalNotificationBlocks = visible.sumOf { it.notificationBlockCount },
+            rows = visible.map { it.toRow() },
+            ignored = stats.filter { it.packageName in ignored }.map { it.toRow() },
+        )
+    }
+
+    private fun AppStat.toRow() =
+        StatRow(packageName, lister.label(packageName), usageSeconds, blockCount, notificationBlockCount)
 }

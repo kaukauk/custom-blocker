@@ -62,6 +62,7 @@ fun ProfileListScreen(
     val locked = lock.locked
     val lockInfo by viewModel.lockInfo.collectAsStateWithLifecycle()
     var showUnlock by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<com.customblocker.data.db.ProfileEntity?>(null) }
     val earnUnlock = com.customblocker.ui.strict.rememberEarnUnlockLauncher(lock.config)
 
     if (showUnlock) {
@@ -137,7 +138,7 @@ fun ProfileListScreen(
                             enabled = !(pLocked && profile.enabled),
                         )
                         IconButton(
-                            onClick = { viewModel.deleteProfile(profile.id) },
+                            onClick = { pendingDelete = profile },
                             enabled = !pLocked,
                         ) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete profile")
@@ -146,6 +147,21 @@ fun ProfileListScreen(
                 }
             }
         }
+    }
+
+    pendingDelete?.let { profile ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete profile?") },
+            text = { Text("\"${profile.title}\" and its apps, websites and conditions will be permanently removed.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteProfile(profile.id)
+                    pendingDelete = null
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
+        )
     }
 
     if (showCreate) {

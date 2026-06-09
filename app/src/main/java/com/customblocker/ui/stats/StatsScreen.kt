@@ -7,10 +7,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -20,15 +23,21 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.customblocker.ui.AppIcon
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +46,7 @@ fun StatsScreen(
     viewModel: StatsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var showIgnored by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -81,26 +91,63 @@ fun StatsScreen(
                 item { Text("No activity recorded yet.", style = MaterialTheme.typography.bodyMedium) }
             } else {
                 items(state.rows, key = { it.packageName }) { row ->
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(row.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                buildString {
-                                    append(formatDuration(row.usageSeconds))
-                                    if (row.blockCount > 0) append(" • ${row.blockCount} blocks")
-                                    if (row.notificationBlockCount > 0) append(" • ${row.notificationBlockCount} notifs")
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
+                    StatRowItem(
+                        row = row,
+                        trailing = {
+                            IconButton(onClick = { viewModel.ignore(row.packageName) }) {
+                                Icon(Icons.Default.VisibilityOff, contentDescription = "Hide from statistics")
+                            }
+                        },
+                    )
+                }
+            }
+
+            if (state.ignored.isNotEmpty()) {
+                item {
+                    TextButton(onClick = { showIgnored = !showIgnored }) {
+                        Text(if (showIgnored) "Hide ignored (${state.ignored.size})" else "Show ignored (${state.ignored.size})")
+                    }
+                }
+                if (showIgnored) {
+                    items(state.ignored, key = { "ignored:${it.packageName}" }) { row ->
+                        StatRowItem(
+                            row = row,
+                            trailing = {
+                                IconButton(onClick = { viewModel.restore(row.packageName) }) {
+                                    Icon(Icons.Default.Add, contentDescription = "Restore to statistics")
+                                }
+                            },
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StatRowItem(row: StatRow, trailing: @Composable () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AppIcon(
+            packageName = row.packageName,
+            modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(row.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                buildString {
+                    append(formatDuration(row.usageSeconds))
+                    if (row.blockCount > 0) append(" • ${row.blockCount} blocks")
+                    if (row.notificationBlockCount > 0) append(" • ${row.notificationBlockCount} notifs")
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        trailing()
     }
 }
 
