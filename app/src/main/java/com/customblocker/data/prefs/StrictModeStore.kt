@@ -90,8 +90,8 @@ class StrictModeStore @Inject constructor(
             hasPin = !p[Keys.PIN_HASH].isNullOrEmpty(),
             lockedUntilMillis = p[Keys.LOCKED_UNTIL] ?: 0L,
             earnedUnlockEnabled = p[Keys.EARN_ENABLED] ?: false,
-            earnWaitMinutes = p[Keys.EARN_WAIT] ?: 5,
-            earnMaxMinutes = p[Keys.EARN_MAX] ?: 5,
+            earnWaitMinutes = (p[Keys.EARN_WAIT] ?: 5).coerceIn(EARN_WAIT_MIN, EARN_WAIT_MAX),
+            earnMaxMinutes = (p[Keys.EARN_MAX] ?: 5).coerceIn(EARN_MAX_MIN, EARN_MAX_CAP),
             unlockUntilMillis = p[Keys.UNLOCK_UNTIL] ?: 0L,
         )
     }
@@ -124,9 +124,17 @@ class StrictModeStore @Inject constructor(
     suspend fun setEarnedUnlockEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.EARN_ENABLED] = enabled }
     suspend fun setEarnWaitMinutes(minutes: Int) =
-        context.dataStore.edit { it[Keys.EARN_WAIT] = minutes.coerceIn(0, 60) }
+        context.dataStore.edit { it[Keys.EARN_WAIT] = minutes.coerceIn(EARN_WAIT_MIN, EARN_WAIT_MAX) }
     suspend fun setEarnMaxMinutes(minutes: Int) =
-        context.dataStore.edit { it[Keys.EARN_MAX] = minutes.coerceIn(1, 60) }
+        context.dataStore.edit { it[Keys.EARN_MAX] = minutes.coerceIn(EARN_MAX_MIN, EARN_MAX_CAP) }
+
+    companion object {
+        /** Earn-unlock wait is configurable 1–10 min; the max banked unlock is fixed-cap 5, down to 1. */
+        const val EARN_WAIT_MIN = 1
+        const val EARN_WAIT_MAX = 10
+        const val EARN_MAX_MIN = 1
+        const val EARN_MAX_CAP = 5
+    }
 
     /** Grant a one-off earned unlock: bypass all blocking until now + [durationSeconds]. */
     suspend fun startEarnedUnlock(durationSeconds: Int, nowMillis: Long) =

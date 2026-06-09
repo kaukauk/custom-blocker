@@ -354,7 +354,7 @@ private fun EarnUnlockSetter(
                     OutlinedTextField(
                         value = wait,
                         onValueChange = { if (it.length <= 3 && it.all(Char::isDigit)) { wait = it; it.toIntOrNull()?.let(onSetWait) } },
-                        label = { Text("Wait (min)") },
+                        label = { Text("Wait (1–10 min)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
@@ -362,7 +362,7 @@ private fun EarnUnlockSetter(
                     OutlinedTextField(
                         value = max,
                         onValueChange = { if (it.length <= 3 && it.all(Char::isDigit)) { max = it; it.toIntOrNull()?.let(onSetMax) } },
-                        label = { Text("Max unlock (min)") },
+                        label = { Text("Max unlock (≤5 min)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
