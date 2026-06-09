@@ -61,6 +61,7 @@ fun BlockListScreen(
     val locked = lock.locked
     var showUnlock by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val earnUnlock = com.customblocker.ui.strict.rememberEarnUnlockLauncher(lock.config)
     val notificationAccess by com.customblocker.ui.onboarding.rememberNotificationAccessState()
 
     if (showUnlock) {
@@ -100,7 +101,13 @@ fun BlockListScreen(
                     PermissionBanner(accessibilityOn = accessibilityOn, overlayOn = overlayOn)
                 }
                 if (locked) {
-                    item { LockedBanner(onUnlock = { showUnlock = true }, remainingMillis = lock.remainingMillis) }
+                    item {
+                        LockedBanner(
+                            onUnlock = { showUnlock = true },
+                            remainingMillis = lock.remainingMillis,
+                            onEarnUnlock = earnUnlock,
+                        )
+                    }
                 }
                 item {
                     Row(

@@ -166,8 +166,13 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
     }
 
+    /** A granted earned-unlock is bypassing all app/website blocking right now. */
+    private fun unlockActive(): Boolean =
+        strictConfig.unlockUntilMillis > System.currentTimeMillis()
+
     /** Read the foreground browser's URL bar and enforce website/keyword rules. */
     private fun evaluateUrl(pkg: String) {
+        if (unlockActive()) return
         val url = BrowserUrlReader.readUrl(pkg, rootInActiveWindow)
         if (url == lastUrl) return
         lastUrl = url
@@ -193,6 +198,7 @@ class BlockerAccessibilityService : AccessibilityService() {
 
     /** Returns true if the app was blocked. */
     private fun evaluate(pkg: String): Boolean {
+        if (unlockActive()) { overlay.hide(); return false }
         return when (val decision = engine.decide(pkg, contextProvider.current())) {
             is BlockDecision.Block -> {
                 L.d(L.ENGINE, "BLOCK $pkg :: ${decision.reason}")

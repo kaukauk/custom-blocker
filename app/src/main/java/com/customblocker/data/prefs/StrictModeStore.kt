@@ -16,8 +16,12 @@ import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** How the user must authenticate to lower/disable Strict Mode (PLAN.md §11). */
-enum class UnlockGate { NONE, PIN, TIMER, CHARGER }
+/**
+ * How the user must authenticate to lower/disable Strict Mode (PLAN.md §11).
+ *  - [COUNTDOWN]: each unlock, wait out a countdown (kept on-screen) — friction, but re-lockable.
+ *  - [TIMER]: a fixed-deadline commitment set at activation; can't unlock early, auto-lifts at the end.
+ */
+enum class UnlockGate { NONE, PIN, COUNTDOWN, TIMER, CHARGER }
 
 /**
  * Strict Mode is app-global (not per-profile). [level]: 1 = lock config, 2 = + block uninstall,
@@ -35,10 +39,21 @@ data class StrictModeConfig(
     val hasPin: Boolean = false,
     /** Wall-clock instant the timed lock expires (0 = no timed lock). */
     val lockedUntilMillis: Long = 0L,
+    /** Earned-unlock escape hatch (TIMER gate only): sit in a window to bank temporary unlock time. */
+    val earnedUnlockEnabled: Boolean = false,
+    /** Mandatory wait (minutes) on the earn window before any bank accrues. */
+    val earnWaitMinutes: Int = 5,
+    /** Max unlock time (minutes) the bank can reach after the wait. */
+    val earnMaxMinutes: Int = 5,
+    /** Wall-clock instant a granted earned-unlock expires (0 = blocking active). */
+    val unlockUntilMillis: Long = 0L,
 ) {
     /** True while a TIMER-gate commitment is still running at wall-clock [now]. */
     fun timedLockActive(now: Long): Boolean =
         enabled && gate == UnlockGate.TIMER && lockedUntilMillis > now
+
+    /** True while a granted earned-unlock is still bypassing blocking at wall-clock [now]. */
+    fun earnedUnlockActive(now: Long): Boolean = unlockUntilMillis > now
 }
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -60,6 +75,10 @@ class StrictModeStore @Inject constructor(
         val PIN_HASH = stringPreferencesKey("strict_pin_hash")
         val PIN_SALT = stringPreferencesKey("strict_pin_salt")
         val LOCKED_UNTIL = longPreferencesKey("strict_locked_until")
+        val EARN_ENABLED = booleanPreferencesKey("strict_earn_enabled")
+        val EARN_WAIT = intPreferencesKey("strict_earn_wait_min")
+        val EARN_MAX = intPreferencesKey("strict_earn_max_min")
+        val UNLOCK_UNTIL = longPreferencesKey("strict_unlock_until")
     }
 
     val config: Flow<StrictModeConfig> = context.dataStore.data.map { p ->
@@ -70,6 +89,10 @@ class StrictModeStore @Inject constructor(
             timerMinutes = p[Keys.TIMER] ?: 5,
             hasPin = !p[Keys.PIN_HASH].isNullOrEmpty(),
             lockedUntilMillis = p[Keys.LOCKED_UNTIL] ?: 0L,
+            earnedUnlockEnabled = p[Keys.EARN_ENABLED] ?: false,
+            earnWaitMinutes = p[Keys.EARN_WAIT] ?: 5,
+            earnMaxMinutes = p[Keys.EARN_MAX] ?: 5,
+            unlockUntilMillis = p[Keys.UNLOCK_UNTIL] ?: 0L,
         )
     }
 
@@ -97,6 +120,17 @@ class StrictModeStore @Inject constructor(
         it[Keys.TIMER] = mins
         it[Keys.LOCKED_UNTIL] = nowMillis + mins.toLong() * 60_000L
     }
+
+    suspend fun setEarnedUnlockEnabled(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.EARN_ENABLED] = enabled }
+    suspend fun setEarnWaitMinutes(minutes: Int) =
+        context.dataStore.edit { it[Keys.EARN_WAIT] = minutes.coerceIn(0, 60) }
+    suspend fun setEarnMaxMinutes(minutes: Int) =
+        context.dataStore.edit { it[Keys.EARN_MAX] = minutes.coerceIn(1, 60) }
+
+    /** Grant a one-off earned unlock: bypass all blocking until now + [durationSeconds]. */
+    suspend fun startEarnedUnlock(durationSeconds: Int, nowMillis: Long) =
+        context.dataStore.edit { it[Keys.UNLOCK_UNTIL] = nowMillis + durationSeconds.coerceAtLeast(0).toLong() * 1000L }
 
     suspend fun setPin(pin: String) = context.dataStore.edit { p ->
         val salt = newSalt()

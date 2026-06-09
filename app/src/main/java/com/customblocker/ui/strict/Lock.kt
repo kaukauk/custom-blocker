@@ -111,11 +111,28 @@ fun rememberDeviceAdminActive(): androidx.compose.runtime.State<Boolean> {
 }
 
 /**
+ * Returns a lambda that opens the Earn-unlock window, but only when it applies: a TIMER commitment
+ * with earned-unlock enabled. Null otherwise — callers pass it straight to [LockedBanner].
+ */
+@Composable
+fun rememberEarnUnlockLauncher(config: StrictModeConfig): (() -> Unit)? {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    return if (config.earnedUnlockEnabled && config.gate == UnlockGate.TIMER) {
+        { context.startActivity(android.content.Intent(context, EarnUnlockActivity::class.java)) }
+    } else null
+}
+
+/**
  * A banner shown on protected screens while locked. For a TIMER commitment it shows the live
  * countdown and no early-unlock button (you committed to it); otherwise it offers to unlock.
  */
 @Composable
-fun LockedBanner(onUnlock: () -> Unit, modifier: Modifier = Modifier, remainingMillis: Long = 0L) {
+fun LockedBanner(
+    onUnlock: () -> Unit,
+    modifier: Modifier = Modifier,
+    remainingMillis: Long = 0L,
+    onEarnUnlock: (() -> Unit)? = null,
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
@@ -124,6 +141,9 @@ fun LockedBanner(onUnlock: () -> Unit, modifier: Modifier = Modifier, remainingM
             Text("Locked by Strict Mode", style = MaterialTheme.typography.titleMedium)
             if (remainingMillis > 0L) {
                 Text("Unlocks in ${formatCountdown(remainingMillis)}.", style = MaterialTheme.typography.bodySmall)
+                if (onEarnUnlock != null) {
+                    TextButton(onClick = onEarnUnlock) { Text("Earn unlock time") }
+                }
             } else {
                 Text("Unlock to change blocking settings.", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = onUnlock) { Text("Unlock") }
@@ -151,6 +171,7 @@ fun UnlockDialog(
         )
         UnlockGate.PIN -> PinUnlock(lockViewModel, onUnlocked, onDismiss)
         UnlockGate.CHARGER -> ChargerUnlock(lockViewModel, onUnlocked, onDismiss)
+        UnlockGate.COUNTDOWN -> CountdownUnlock(config.timerMinutes, lockViewModel, onUnlocked, onDismiss)
         UnlockGate.TIMER -> TimerCommitmentInfo(config.lockedUntilMillis, onDismiss)
     }
 }
@@ -213,6 +234,26 @@ private fun ChargerUnlock(vm: LockViewModel, onUnlocked: () -> Unit, onDismiss: 
         confirmButton = {
             TextButton(onClick = { vm.markUnlocked(); onUnlocked() }, enabled = charging) { Text("Unlock") }
         },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * COUNTDOWN gate: wait out a countdown that must stay on-screen; when it reaches zero we unlock for
+ * this session. Closing it early cancels (re-locks). Friction-to-unlock, not a fixed commitment.
+ */
+@Composable
+private fun CountdownUnlock(minutes: Int, vm: LockViewModel, onUnlocked: () -> Unit, onDismiss: () -> Unit) {
+    var remaining by remember { mutableStateOf(minutes * 60) }
+    LaunchedEffect(Unit) {
+        while (remaining > 0) { delay(1_000); remaining-- }
+        vm.markUnlocked(); onUnlocked()
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wait to unlock") },
+        text = { Text("Unlocks in ${formatCountdown(remaining * 1000L)}. Keep this open.") },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

@@ -51,6 +51,7 @@ private val LEVELS = listOf(
 private val GATES = listOf(
     UnlockGate.NONE to ("No gate" to "Can be turned off freely (not recommended)."),
     UnlockGate.PIN to ("PIN" to "Enter a PIN to unlock."),
+    UnlockGate.COUNTDOWN to ("Countdown" to "Wait out a countdown each time you unlock."),
     UnlockGate.TIMER to ("Timer" to "Commit for a set time — can't be turned off until it elapses."),
     UnlockGate.CHARGER to ("Charger" to "Must be plugged in to unlock."),
 )
@@ -66,6 +67,7 @@ fun StrictModeScreen(
     val lock by lockViewModel.state.collectAsStateWithLifecycle()
     val locked = lock.locked
     var showUnlock by remember { mutableStateOf(false) }
+    val earnUnlock = rememberEarnUnlockLauncher(lock.config)
 
     if (showUnlock) {
         UnlockDialog(
@@ -94,7 +96,13 @@ fun StrictModeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (locked) {
-                item { LockedBanner(onUnlock = { showUnlock = true }, remainingMillis = lock.remainingMillis) }
+                item {
+                    LockedBanner(
+                        onUnlock = { showUnlock = true },
+                        remainingMillis = lock.remainingMillis,
+                        onEarnUnlock = earnUnlock,
+                    )
+                }
             }
             item {
                 Row(
@@ -160,8 +168,35 @@ fun StrictModeScreen(
             if (!locked && config.gate == UnlockGate.PIN) {
                 item { PinSetter(hasPin = config.hasPin, onSet = viewModel::setPin) }
             }
+            if (!locked && config.gate == UnlockGate.COUNTDOWN) {
+                item {
+                    TimerSetter(
+                        title = "Countdown length",
+                        description = "Each time you unlock, wait this long with the dialog open.",
+                        minutes = config.timerMinutes,
+                        onSet = viewModel::setTimerMinutes,
+                    )
+                }
+            }
             if (!locked && config.gate == UnlockGate.TIMER) {
-                item { TimerSetter(minutes = config.timerMinutes, onSet = viewModel::setTimerMinutes) }
+                item {
+                    TimerSetter(
+                        title = "Stay locked for",
+                        description = "Strict Mode turns on for this long and can't be switched off until it ends.",
+                        minutes = config.timerMinutes,
+                        onSet = viewModel::setTimerMinutes,
+                    )
+                }
+                item {
+                    EarnUnlockSetter(
+                        enabled = config.earnedUnlockEnabled,
+                        waitMinutes = config.earnWaitMinutes,
+                        maxMinutes = config.earnMaxMinutes,
+                        onToggle = viewModel::setEarnedUnlockEnabled,
+                        onSetWait = viewModel::setEarnWaitMinutes,
+                        onSetMax = viewModel::setEarnMaxMinutes,
+                    )
+                }
             }
         }
     }
@@ -245,18 +280,15 @@ private fun DeviceAdminCard(locked: Boolean, onUnlockNeeded: () -> Unit) {
 }
 
 @Composable
-private fun TimerSetter(minutes: Int, onSet: (Int) -> Unit) {
+private fun TimerSetter(title: String, description: String, minutes: Int, onSet: (Int) -> Unit) {
     var days by remember(minutes) { mutableStateOf((minutes / 1440).toString()) }
     var hours by remember(minutes) { mutableStateOf((minutes % 1440 / 60).toString()) }
     var mins by remember(minutes) { mutableStateOf((minutes % 60).toString()) }
     val total = (days.toIntOrNull() ?: 0) * 1440 + (hours.toIntOrNull() ?: 0) * 60 + (mins.toIntOrNull() ?: 0)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Stay locked for", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "Strict Mode turns on for this long and can't be switched off until it ends.",
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(description, style = MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = days,
@@ -285,6 +317,57 @@ private fun TimerSetter(minutes: Int, onSet: (Int) -> Unit) {
             }
             TextButton(onClick = { onSet(total) }, enabled = total > 0) {
                 Text("Save")
+            }
+        }
+    }
+}
+
+@Composable
+private fun EarnUnlockSetter(
+    enabled: Boolean,
+    waitMinutes: Int,
+    maxMinutes: Int,
+    onToggle: (Boolean) -> Unit,
+    onSetWait: (Int) -> Unit,
+    onSetMax: (Int) -> Unit,
+) {
+    var wait by remember(waitMinutes) { mutableStateOf(waitMinutes.toString()) }
+    var max by remember(maxMinutes) { mutableStateOf(maxMinutes.toString()) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Allow earned unlock", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "While committed, you can sit in a full-screen window to bank temporary unlock time.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = onToggle)
+            }
+            if (enabled) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = wait,
+                        onValueChange = { if (it.length <= 3 && it.all(Char::isDigit)) { wait = it; it.toIntOrNull()?.let(onSetWait) } },
+                        label = { Text("Wait (min)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = max,
+                        onValueChange = { if (it.length <= 3 && it.all(Char::isDigit)) { max = it; it.toIntOrNull()?.let(onSetMax) } },
+                        label = { Text("Max unlock (min)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }

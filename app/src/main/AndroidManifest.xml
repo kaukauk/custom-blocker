@@ -35,6 +35,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Earn-unlock window: non-resizable so it can't be put in split-screen (anti-gaming). -->
+        <activity
+            android:name=".ui.strict.EarnUnlockActivity"
+            android:exported="false"
+            android:resizeableActivity="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.CustomBlocker" />
+
         <service
             android:name=".service.accessibility.BlockerAccessibilityService"
             android:exported="false"

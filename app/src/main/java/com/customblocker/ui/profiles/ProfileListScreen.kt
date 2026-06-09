@@ -61,6 +61,7 @@ fun ProfileListScreen(
     val lock by lockViewModel.state.collectAsStateWithLifecycle()
     val locked = lock.locked
     var showUnlock by remember { mutableStateOf(false) }
+    val earnUnlock = com.customblocker.ui.strict.rememberEarnUnlockLauncher(lock.config)
 
     if (showUnlock) {
         UnlockDialog(
@@ -99,7 +100,13 @@ fun ProfileListScreen(
             item { PermissionBanner(accessibilityOn = accessibilityOn, overlayOn = overlayOn) }
             item { ReliabilityBanner() }
             if (locked) {
-                item { LockedBanner(onUnlock = { showUnlock = true }, remainingMillis = lock.remainingMillis) }
+                item {
+                    LockedBanner(
+                        onUnlock = { showUnlock = true },
+                        remainingMillis = lock.remainingMillis,
+                        onEarnUnlock = earnUnlock,
+                    )
+                }
             }
             if (profiles.isEmpty()) {
                 item { Text("No profiles yet — tap + to create one.", style = MaterialTheme.typography.bodyMedium) }
