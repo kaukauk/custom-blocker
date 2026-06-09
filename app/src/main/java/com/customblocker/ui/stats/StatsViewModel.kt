@@ -7,12 +7,14 @@ import com.customblocker.data.prefs.StatsPrefsStore
 import com.customblocker.data.repo.BlockerRepository
 import com.customblocker.ui.AppLister
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -55,7 +57,8 @@ class StatsViewModel @Inject constructor(
             combine(repository.observeAppStats(from, today), statsPrefs.ignored) { stats, ignored ->
                 toUiState(r, stats, ignored)
             }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatsUiState())
+        }.flowOn(Dispatchers.Default) // label resolution hits PackageManager — keep it off the main thread
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatsUiState())
 
     fun setRange(r: StatsRange) { range.value = r }
 

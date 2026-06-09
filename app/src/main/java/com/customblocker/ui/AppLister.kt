@@ -25,10 +25,14 @@ class AppLister @Inject constructor(
             .sortedBy { it.label.lowercase() }
     }
 
-    fun label(packageName: String): String = try {
-        val pm = context.packageManager
-        pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
-    } catch (e: Exception) {
-        packageName
+    private val labelCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    fun label(packageName: String): String = labelCache.getOrPut(packageName) {
+        try {
+            val pm = context.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+        } catch (e: Exception) {
+            packageName
+        }
     }
 }
