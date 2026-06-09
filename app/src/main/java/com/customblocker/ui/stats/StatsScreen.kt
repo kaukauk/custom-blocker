@@ -112,6 +112,7 @@ fun StatsScreen(
                     items(state.ignored, key = { "ignored:${it.packageName}" }) { row ->
                         StatRowItem(
                             row = row,
+                            showStats = false,
                             trailing = {
                                 IconButton(onClick = { viewModel.restore(row.packageName) }) {
                                     Icon(Icons.Default.Add, contentDescription = "Restore to statistics")
@@ -126,7 +127,7 @@ fun StatsScreen(
 }
 
 @Composable
-private fun StatRowItem(row: StatRow, trailing: @Composable () -> Unit) {
+private fun StatRowItem(row: StatRow, trailing: @Composable () -> Unit, showStats: Boolean = true) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -138,14 +139,16 @@ private fun StatRowItem(row: StatRow, trailing: @Composable () -> Unit) {
         )
         Column(Modifier.weight(1f)) {
             Text(row.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                buildString {
-                    append(formatDuration(row.usageSeconds))
-                    if (row.blockCount > 0) append(" • ${row.blockCount} blocks")
-                    if (row.notificationBlockCount > 0) append(" • ${row.notificationBlockCount} notifs")
-                },
-                style = MaterialTheme.typography.bodySmall,
-            )
+            if (showStats) {
+                Text(
+                    buildString {
+                        append(formatDuration(row.usageSeconds))
+                        if (row.blockCount > 0) append(" • ${row.blockCount} blocks")
+                        if (row.notificationBlockCount > 0) append(" • ${row.notificationBlockCount} notifs")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
         trailing()
     }

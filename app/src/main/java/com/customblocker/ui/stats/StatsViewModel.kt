@@ -59,19 +59,26 @@ class StatsViewModel @Inject constructor(
 
     fun setRange(r: StatsRange) { range.value = r }
 
-    fun ignore(packageName: String) = viewModelScope.launch { statsPrefs.ignore(packageName) }
+    /** Ignore an app: stop recording it (StatsRecorder honours the same set) and purge its history. */
+    fun ignore(packageName: String) = viewModelScope.launch {
+        statsPrefs.ignore(packageName)
+        repository.deleteStatsForPackage(packageName)
+    }
+
     fun restore(packageName: String) = viewModelScope.launch { statsPrefs.unignore(packageName) }
 
     private fun toUiState(r: StatsRange, stats: List<AppStat>, ignored: Set<String>): StatsUiState {
+        // Recording already skips ignored apps and their history is purged on ignore, so any rows
+        // here are already non-ignored; the filter is just belt-and-suspenders for in-flight events.
         val visible = stats.filter { it.packageName !in ignored }
         return StatsUiState(
             range = r,
-            // Totals reflect only what's shown — ignored apps shouldn't inflate screen time/blocks.
             totalUsageSeconds = visible.sumOf { it.usageSeconds },
             totalBlocks = visible.sumOf { it.blockCount },
             totalNotificationBlocks = visible.sumOf { it.notificationBlockCount },
             rows = visible.map { it.toRow() },
-            ignored = stats.filter { it.packageName in ignored }.map { it.toRow() },
+            // The ignored section is driven by the set itself (no stats remain) so it can be restored.
+            ignored = ignored.sorted().map { StatRow(it, lister.label(it), 0, 0, 0) },
         )
     }
 

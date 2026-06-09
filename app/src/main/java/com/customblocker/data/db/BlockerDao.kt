@@ -125,6 +125,10 @@ interface BlockerDao {
     )
     suspend fun incrementNotificationBlock(pkg: String, day: Long)
 
+    /** Purge all recorded stats for a package (used when it's added to the stats ignore list). */
+    @Query("DELETE FROM daily_stats WHERE packageName = :pkg")
+    suspend fun deleteStatsForPackage(pkg: String)
+
     /** Per-app totals over [fromDay, toDay], most-used/blocked first. */
     @Query(
         "SELECT packageName, SUM(usageSeconds) AS usageSeconds, SUM(blockCount) AS blockCount, " +

@@ -195,6 +195,8 @@ class BlockerRepository @Inject constructor(
     fun observeAppStats(fromDay: Long, toDay: Long): Flow<List<AppStat>> =
         dao.observeAppStats(fromDay, toDay)
 
+    suspend fun deleteStatsForPackage(packageName: String) = dao.deleteStatsForPackage(packageName)
+
     // --- persisted usage counters (Phase 5 reliability) ---
     suspend fun loadUsageCounters(): List<UsageCounterEntity> = dao.getAllUsageCounters()
 
