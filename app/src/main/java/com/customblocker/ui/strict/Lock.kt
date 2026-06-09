@@ -36,11 +36,31 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class LockUi(val locked: Boolean = false, val config: StrictModeConfig = StrictModeConfig())
+data class LockUi(
+    val locked: Boolean = false,
+    val config: StrictModeConfig = StrictModeConfig(),
+    /** For a TIMER commitment: ms left until it lifts (0 otherwise). */
+    val remainingMillis: Long = 0L,
+)
+
+/** Format a millisecond remaining-duration as "2d 03:05:09" / "3:05:09" / "5:09". */
+fun formatCountdown(ms: Long): String {
+    val total = (ms / 1000).coerceAtLeast(0)
+    val d = total / 86_400
+    val h = total % 86_400 / 3_600
+    val m = total % 3_600 / 60
+    val s = total % 60
+    return when {
+        d > 0 -> "%dd %02d:%02d:%02d".format(d, h, m, s)
+        h > 0 -> "%d:%02d:%02d".format(h, m, s)
+        else -> "%d:%02d".format(m, s)
+    }
+}
 
 /** Shared lock state for any screen with Strict-Mode-protected actions. */
 @HiltViewModel
@@ -49,9 +69,20 @@ class LockViewModel @Inject constructor(
     private val unlock: UnlockManager,
 ) : ViewModel() {
 
+    // 1 Hz clock so a TIMER commitment counts down live and the lock lifts the moment it expires.
+    private val ticker = flow {
+        while (true) { emit(System.currentTimeMillis()); delay(1_000) }
+    }
+
     val state: StateFlow<LockUi> =
-        combine(store.config, unlock.unlocked) { cfg, unlocked ->
-            LockUi(locked = cfg.enabled && !unlocked, config = cfg)
+        combine(store.config, unlock.unlocked, ticker) { cfg, unlocked, now ->
+            val locked =
+                if (cfg.gate == UnlockGate.TIMER) cfg.timedLockActive(now)
+                else cfg.enabled && !unlocked
+            val remaining =
+                if (cfg.enabled && cfg.gate == UnlockGate.TIMER) (cfg.lockedUntilMillis - now).coerceAtLeast(0L)
+                else 0L
+            LockUi(locked = locked, config = cfg, remainingMillis = remaining)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LockUi())
 
     fun markUnlocked() = unlock.markUnlocked()
@@ -79,17 +110,24 @@ fun rememberDeviceAdminActive(): androidx.compose.runtime.State<Boolean> {
     return state
 }
 
-/** A banner shown on protected screens while locked, offering to unlock. */
+/**
+ * A banner shown on protected screens while locked. For a TIMER commitment it shows the live
+ * countdown and no early-unlock button (you committed to it); otherwise it offers to unlock.
+ */
 @Composable
-fun LockedBanner(onUnlock: () -> Unit, modifier: Modifier = Modifier) {
+fun LockedBanner(onUnlock: () -> Unit, modifier: Modifier = Modifier, remainingMillis: Long = 0L) {
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Locked by Strict Mode", style = MaterialTheme.typography.titleMedium)
-            Text("Unlock to change blocking settings.", style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = onUnlock) { Text("Unlock") }
+            if (remainingMillis > 0L) {
+                Text("Unlocks in ${formatCountdown(remainingMillis)}.", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text("Unlock to change blocking settings.", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = onUnlock) { Text("Unlock") }
+            }
         }
     }
 }
@@ -113,7 +151,7 @@ fun UnlockDialog(
         )
         UnlockGate.PIN -> PinUnlock(lockViewModel, onUnlocked, onDismiss)
         UnlockGate.CHARGER -> ChargerUnlock(lockViewModel, onUnlocked, onDismiss)
-        UnlockGate.TIMER -> TimerUnlock(config.timerMinutes, lockViewModel, onUnlocked, onDismiss)
+        UnlockGate.TIMER -> TimerCommitmentInfo(config.lockedUntilMillis, onDismiss)
     }
 }
 
@@ -179,29 +217,23 @@ private fun ChargerUnlock(vm: LockViewModel, onUnlocked: () -> Unit, onDismiss: 
     )
 }
 
+/**
+ * TIMER gate is a commitment, not a wait-out-now timer: it can't be unlocked early. This dialog just
+ * shows the live countdown to the deadline; the lock lifts on its own when it elapses.
+ */
 @Composable
-private fun TimerUnlock(minutes: Int, vm: LockViewModel, onUnlocked: () -> Unit, onDismiss: () -> Unit) {
-    var remaining by remember { mutableStateOf(minutes * 60) }
-    LaunchedEffect(Unit) {
-        while (remaining > 0) { delay(1_000); remaining-- }
-        vm.markUnlocked(); onUnlocked()
+private fun TimerCommitmentInfo(lockedUntilMillis: Long, onDismiss: () -> Unit) {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(lockedUntilMillis) {
+        while (now < lockedUntilMillis) { delay(1_000); now = System.currentTimeMillis() }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Wait to unlock") },
+        title = { Text("Locked until the timer ends") },
         text = {
-            val d = remaining / 86_400
-            val h = remaining % 86_400 / 3_600
-            val m = remaining % 3_600 / 60
-            val s = remaining % 60
-            val clock = when {
-                d > 0 -> "%dd %02d:%02d:%02d".format(d, h, m, s)
-                h > 0 -> "%d:%02d:%02d".format(h, m, s)
-                else -> "%d:%02d".format(m, s)
-            }
-            Text("Strict Mode unlocks in $clock. Keep this open.")
+            Text("Strict Mode is committed and can't be unlocked early. It unlocks in " +
+                "${formatCountdown(lockedUntilMillis - now)}.")
         },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
     )
 }

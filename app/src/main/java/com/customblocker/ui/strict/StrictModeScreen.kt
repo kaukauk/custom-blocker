@@ -51,7 +51,7 @@ private val LEVELS = listOf(
 private val GATES = listOf(
     UnlockGate.NONE to ("No gate" to "Can be turned off freely (not recommended)."),
     UnlockGate.PIN to ("PIN" to "Enter a PIN to unlock."),
-    UnlockGate.TIMER to ("Timer" to "Wait out a countdown to unlock."),
+    UnlockGate.TIMER to ("Timer" to "Commit for a set time — can't be turned off until it elapses."),
     UnlockGate.CHARGER to ("Charger" to "Must be plugged in to unlock."),
 )
 
@@ -94,7 +94,7 @@ fun StrictModeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (locked) {
-                item { LockedBanner(onUnlock = { showUnlock = true }) }
+                item { LockedBanner(onUnlock = { showUnlock = true }, remainingMillis = lock.remainingMillis) }
             }
             item {
                 Row(
@@ -252,7 +252,11 @@ private fun TimerSetter(minutes: Int, onSet: (Int) -> Unit) {
     val total = (days.toIntOrNull() ?: 0) * 1440 + (hours.toIntOrNull() ?: 0) * 60 + (mins.toIntOrNull() ?: 0)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Countdown length", style = MaterialTheme.typography.titleSmall)
+            Text("Stay locked for", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Strict Mode turns on for this long and can't be switched off until it ends.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = days,

@@ -100,7 +100,7 @@ fun BlockListScreen(
                     PermissionBanner(accessibilityOn = accessibilityOn, overlayOn = overlayOn)
                 }
                 if (locked) {
-                    item { LockedBanner(onUnlock = { showUnlock = true }) }
+                    item { LockedBanner(onUnlock = { showUnlock = true }, remainingMillis = lock.remainingMillis) }
                 }
                 item {
                     Row(

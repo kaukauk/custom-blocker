@@ -10,6 +10,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import com.customblocker.data.prefs.StrictModeConfig
 import com.customblocker.data.prefs.StrictModeStore
+import com.customblocker.data.prefs.UnlockGate
 import com.customblocker.data.stats.StatsRecorder
 import com.customblocker.domain.engine.BlockDecision
 import com.customblocker.domain.engine.BlockingEngine
@@ -89,10 +90,15 @@ class BlockerAccessibilityService : AccessibilityService() {
         L.d(L.FG, "accessibility service connected")
         // Keep the latest Strict Mode config for the L3 settings guard.
         scope.launch { strictModeStore.config.collect { strictConfig = it } }
-        // Mid-session ticker: accrue usage + re-evaluate the current app every few seconds.
+        // Mid-session ticker: accrue usage + re-evaluate the current app every few seconds, and
+        // auto-release a Strict Mode TIMER commitment once its deadline passes.
         scope.launch {
             while (isActive) {
                 delay(TICK_MS)
+                val c = strictConfig
+                if (c.enabled && c.gate == UnlockGate.TIMER && c.lockedUntilMillis in 1..System.currentTimeMillis()) {
+                    strictModeStore.setEnabled(false)   // also clears the deadline
+                }
                 if (powerManager.isInteractive) {
                     accrueUsage()
                     trackedPkg?.let { evaluate(it) }
@@ -125,14 +131,18 @@ class BlockerAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                // Strict Mode L3: block the Settings app (except whitelisted screens) to stop the
-                // user disabling our service / force-stopping us / removing the device admin.
-                if (strictConfig.enabled && strictConfig.level >= 3 && !unlockManager.unlocked.value &&
-                    SettingsGuard.shouldBlock(pkg, event.className?.toString())
-                ) {
-                    L.d(L.ENGINE, "STRICT L3 block: $pkg/${event.className}")
-                    enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
-                    return
+                // Strict Mode L3: block the Settings app (except whitelisted screens like Wi-Fi /
+                // Bluetooth / Language) to stop the user disabling our service / force-stopping us /
+                // removing the device admin. Respects the TIMER commitment (lifts at its deadline).
+                val strictlyLocked =
+                    if (strictConfig.gate == UnlockGate.TIMER) strictConfig.timedLockActive(System.currentTimeMillis())
+                    else strictConfig.enabled && !unlockManager.unlocked.value
+                if (strictlyLocked && strictConfig.level >= 3 && pkg in SettingsGuard.GUARDED_PACKAGES) {
+                    L.d(L.ENGINE, "STRICT L3 settings: pkg=$pkg titles=${event.text}")
+                    if (SettingsGuard.shouldBlock(pkg, event.text)) {
+                        enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
+                        return
+                    }
                 }
                 if (pkg != lastForeground) {
                     lastForeground = pkg

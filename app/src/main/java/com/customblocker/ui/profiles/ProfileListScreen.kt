@@ -99,7 +99,7 @@ fun ProfileListScreen(
             item { PermissionBanner(accessibilityOn = accessibilityOn, overlayOn = overlayOn) }
             item { ReliabilityBanner() }
             if (locked) {
-                item { LockedBanner(onUnlock = { showUnlock = true }) }
+                item { LockedBanner(onUnlock = { showUnlock = true }, remainingMillis = lock.remainingMillis) }
             }
             if (profiles.isEmpty()) {
                 item { Text("No profiles yet — tap + to create one.", style = MaterialTheme.typography.bodyMedium) }

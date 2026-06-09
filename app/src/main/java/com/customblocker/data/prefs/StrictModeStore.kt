@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -21,6 +22,10 @@ enum class UnlockGate { NONE, PIN, TIMER, CHARGER }
 /**
  * Strict Mode is app-global (not per-profile). [level]: 1 = lock config, 2 = + block uninstall,
  * 3 = + block device Settings. While [enabled], protected actions require passing the [gate].
+ *
+ * For the [UnlockGate.TIMER] gate, [timerMinutes] is a *commitment duration*: enabling Strict Mode
+ * stamps [lockedUntilMillis] = now + duration, and it stays locked (no early unlock) until that
+ * wall-clock instant — the countdown keeps running across app close / process death / reboot.
  */
 data class StrictModeConfig(
     val enabled: Boolean = false,
@@ -28,7 +33,13 @@ data class StrictModeConfig(
     val gate: UnlockGate = UnlockGate.NONE,
     val timerMinutes: Int = 5,
     val hasPin: Boolean = false,
-)
+    /** Wall-clock instant the timed lock expires (0 = no timed lock). */
+    val lockedUntilMillis: Long = 0L,
+) {
+    /** True while a TIMER-gate commitment is still running at wall-clock [now]. */
+    fun timedLockActive(now: Long): Boolean =
+        enabled && gate == UnlockGate.TIMER && lockedUntilMillis > now
+}
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
@@ -48,6 +59,7 @@ class StrictModeStore @Inject constructor(
         val TIMER = intPreferencesKey("strict_timer_minutes")
         val PIN_HASH = stringPreferencesKey("strict_pin_hash")
         val PIN_SALT = stringPreferencesKey("strict_pin_salt")
+        val LOCKED_UNTIL = longPreferencesKey("strict_locked_until")
     }
 
     val config: Flow<StrictModeConfig> = context.dataStore.data.map { p ->
@@ -57,14 +69,34 @@ class StrictModeStore @Inject constructor(
             gate = runCatching { UnlockGate.valueOf(p[Keys.GATE] ?: "NONE") }.getOrDefault(UnlockGate.NONE),
             timerMinutes = p[Keys.TIMER] ?: 5,
             hasPin = !p[Keys.PIN_HASH].isNullOrEmpty(),
+            lockedUntilMillis = p[Keys.LOCKED_UNTIL] ?: 0L,
         )
     }
 
-    suspend fun setEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.ENABLED] = enabled }
+    /** Cap a duration to [1 min, 90 days] — enough for any realistic commitment. */
+    private fun clampMinutes(minutes: Int) = minutes.coerceIn(1, 90 * 24 * 60)
+
+    suspend fun setEnabled(enabled: Boolean) = context.dataStore.edit {
+        it[Keys.ENABLED] = enabled
+        if (!enabled) it.remove(Keys.LOCKED_UNTIL)   // turning off ends any timed commitment
+    }
     suspend fun setLevel(level: Int) = context.dataStore.edit { it[Keys.LEVEL] = level.coerceIn(1, 3) }
     suspend fun setGate(gate: UnlockGate) = context.dataStore.edit { it[Keys.GATE] = gate.name }
     suspend fun setTimerMinutes(minutes: Int) =
-        context.dataStore.edit { it[Keys.TIMER] = minutes.coerceIn(1, 1440) }
+        context.dataStore.edit { it[Keys.TIMER] = clampMinutes(minutes) }
+
+    /**
+     * Enable Strict Mode as a TIMER commitment: locked until now + the stored/here-given duration.
+     * The deadline is wall-clock so it survives reboot (a determined user could still move the system
+     * clock — block Settings > Date & time under L3 to close that hole).
+     */
+    suspend fun startTimedLock(durationMinutes: Int, nowMillis: Long) = context.dataStore.edit {
+        val mins = clampMinutes(durationMinutes)
+        it[Keys.ENABLED] = true
+        it[Keys.GATE] = UnlockGate.TIMER.name
+        it[Keys.TIMER] = mins
+        it[Keys.LOCKED_UNTIL] = nowMillis + mins.toLong() * 60_000L
+    }
 
     suspend fun setPin(pin: String) = context.dataStore.edit { p ->
         val salt = newSalt()
