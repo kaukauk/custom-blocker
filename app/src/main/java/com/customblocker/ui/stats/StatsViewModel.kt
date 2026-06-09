@@ -25,6 +25,7 @@ enum class StatsRange(val label: String, val days: Int) { TODAY("Today", 1), WEE
 data class StatRow(
     val packageName: String,
     val label: String,
+    val icon: androidx.compose.ui.graphics.ImageBitmap?,
     val usageSeconds: Int,
     val blockCount: Int,
     val notificationBlockCount: Int,
@@ -81,10 +82,10 @@ class StatsViewModel @Inject constructor(
             totalNotificationBlocks = visible.sumOf { it.notificationBlockCount },
             rows = visible.map { it.toRow() },
             // The ignored section is driven by the set itself (no stats remain) so it can be restored.
-            ignored = ignored.sorted().map { StatRow(it, lister.label(it), 0, 0, 0) },
+            ignored = ignored.sorted().map { StatRow(it, lister.label(it), lister.iconBitmap(it), 0, 0, 0) },
         )
     }
 
     private fun AppStat.toRow() =
-        StatRow(packageName, lister.label(packageName), usageSeconds, blockCount, notificationBlockCount)
+        StatRow(packageName, lister.label(packageName), lister.iconBitmap(packageName), usageSeconds, blockCount, notificationBlockCount)
 }

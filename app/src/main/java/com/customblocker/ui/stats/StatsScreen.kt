@@ -35,9 +35,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.customblocker.ui.AppIcon
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,10 +134,12 @@ private fun StatRowItem(row: StatRow, trailing: @Composable () -> Unit, showStat
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(
-            packageName = row.packageName,
-            modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small),
-        )
+        val iconModifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small)
+        if (row.icon != null) {
+            Image(bitmap = row.icon, contentDescription = null, modifier = iconModifier)
+        } else {
+            Box(iconModifier)
+        }
         Column(Modifier.weight(1f)) {
             Text(row.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (showStats) {
