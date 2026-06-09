@@ -129,8 +129,11 @@ class StrictModeStore @Inject constructor(
         context.dataStore.edit { it[Keys.EARN_MAX] = minutes.coerceIn(EARN_MAX_MIN, EARN_MAX_CAP) }
 
     companion object {
-        /** Earn-unlock wait is configurable 1–10 min; the max banked unlock is fixed-cap 5, down to 1. */
-        const val EARN_WAIT_MIN = 1
+        /**
+         * Earn-unlock wait is configurable 1–10 min; the max banked unlock is fixed-cap 5, down to 1.
+         * Debug builds allow a 0-min wait so testing doesn't require sitting through the countdown.
+         */
+        val EARN_WAIT_MIN = if (com.customblocker.BuildConfig.DEBUG) 0 else 1
         const val EARN_WAIT_MAX = 10
         const val EARN_MAX_MIN = 1
         const val EARN_MAX_CAP = 5

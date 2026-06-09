@@ -354,7 +354,7 @@ private fun EarnUnlockSetter(
                     OutlinedTextField(
                         value = wait,
                         onValueChange = { if (it.length <= 3 && it.all(Char::isDigit)) { wait = it; it.toIntOrNull()?.let(onSetWait) } },
-                        label = { Text("Wait (1–10 min)") },
+                        label = { Text("Wait (${com.customblocker.data.prefs.StrictModeStore.EARN_WAIT_MIN}–10 min)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
