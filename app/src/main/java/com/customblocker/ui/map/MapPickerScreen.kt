@@ -49,6 +49,9 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -109,8 +112,16 @@ fun MapPickerScreen(
             if (!inverted) {
                 points = circle                                // blocked INSIDE the circle
             } else {
-                points = squareAround(p, maxOf(radius * 25.0, 8_000.0))  // blocked OUTSIDE…
-                holes = listOf(circle)                                   // …with the circle cut out
+                // Blocked OUTSIDE: fill the whole visible map (a big square centred on the current
+                // view) with the circle cut out as a hole. Recomputed on pan/zoom so it always covers.
+                val c = mapView.mapCenter
+                val bb = mapView.boundingBox
+                val spanM = maxOf(
+                    bb.latitudeSpan * 111_320.0,
+                    bb.longitudeSpanWithDateLine * 111_320.0 * cos(Math.toRadians(c.latitude)),
+                )
+                points = squareAround(GeoPoint(c.latitude, c.longitude), maxOf(spanM, radius * 3.0))
+                holes = listOf(circle)
             }
         }
         mapView.overlays.add(poly)
@@ -187,6 +198,15 @@ fun MapPickerScreen(
                             }
                             overlays.add(0, MapEventsOverlay(events))
                             overlays.add(myLocation)
+                            // Keep the "blocked outside" fill covering the viewport as it moves.
+                            addMapListener(object : MapListener {
+                                override fun onScroll(event: ScrollEvent?): Boolean {
+                                    if (inverted) redraw(); return false
+                                }
+                                override fun onZoom(event: ZoomEvent?): Boolean {
+                                    if (inverted) redraw(); return false
+                                }
+                            })
                             onResume()
                         }
                     },
