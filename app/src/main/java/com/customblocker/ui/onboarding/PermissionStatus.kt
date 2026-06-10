@@ -129,7 +129,7 @@ fun NotificationNudgeBanner(modifier: Modifier = Modifier) {
             Text(
                 "While a profile is blocking, those apps can still buzz and pull you back in. Turn on " +
                     "notification access and we'll hold them instead — quietly batched and delivered once " +
-                    "the block lifts (like the top of the hour), so you stay focused now without missing a thing.",
+                    "the block lifts (like the top of the hour), so you're not constantly pinged without missing a thing.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Button(
