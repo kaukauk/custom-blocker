@@ -92,9 +92,6 @@ class BlockListViewModel @Inject constructor(
             val windows = rule.timeWindows.joinToString(", ") { "${hhmm(it.fromMinuteOfDay)}–${hhmm(it.toMinuteOfDay)}" }
             out += ConditionSummary(ConditionTypes.TIME, "Schedule", listOf(days, windows).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "any time" })
         }
-        if (m and ConditionTypes.WIFI != 0) {
-            out += ConditionSummary(ConditionTypes.WIFI, "Wi-Fi", rule.wifiSsids.joinToString(", ").ifBlank { "any network" })
-        }
         if (m and ConditionTypes.LOCATION != 0) {
             val n = rule.geofences.size
             out += ConditionSummary(ConditionTypes.LOCATION, "Location", if (n == 1) "1 place" else "$n places")
@@ -107,7 +104,7 @@ class BlockListViewModel @Inject constructor(
             out += ConditionSummary(ConditionTypes.LAUNCH_COUNT, "Launch limit", "$n ${if (n == 1) "launch" else "launches"} ${periodDetail(rule.launchLimit.period)}")
         }
         if (m and ConditionTypes.CHARGER != 0) {
-            out += ConditionSummary(ConditionTypes.CHARGER, "Charging", "while plugged in")
+            out += ConditionSummary(ConditionTypes.CHARGER, "Charging", if (rule.chargerInverted) "while not charging" else "while plugged in")
         }
         return out
     }

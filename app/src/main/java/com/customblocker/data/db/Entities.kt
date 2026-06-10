@@ -26,6 +26,8 @@ data class ProfileEntity(
     val blockUnsupportedBrowsers: Boolean = false,
     /** Eject the user when a targeted app is launched/foregrounded. */
     val blockLaunch: Boolean = true,
+    /** CHARGER condition sense: false = active while charging, true = active while NOT charging. */
+    val chargerInverted: Boolean = false,
     /** Suppress notifications from targeted apps while this profile is active. */
     val blockNotifications: Boolean = false,
     /** When blocking notifications: true = batch (snooze, re-deliver at next reset), false = hide. */

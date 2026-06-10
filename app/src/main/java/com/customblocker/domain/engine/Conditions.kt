@@ -71,6 +71,8 @@ data class ProfileRule(
     val blockUnsupportedBrowsers: Boolean = false,
     /** Eject the user when a targeted app is launched/foregrounded. */
     val blockLaunch: Boolean = true,
+    /** CHARGER condition sense: false = active while charging, true = active while NOT charging. */
+    val chargerInverted: Boolean = false,
     /** Suppress notifications from targeted apps while active. */
     val blockNotifications: Boolean = false,
     /** When blocking notifications: true = batch (snooze until next reset), false = hide. */
@@ -117,7 +119,8 @@ object ConditionEvaluator {
             if (ssid !in rule.wifiSsids) return false
         }
         if (m and ConditionTypes.CHARGER != 0) {
-            if (!ctx.charging) return false
+            // Not inverted → require charging; inverted → require NOT charging.
+            if (ctx.charging == rule.chargerInverted) return false
         }
         if (m and ConditionTypes.LOCATION != 0) {
             val satisfied = rule.geofences.any { fence ->

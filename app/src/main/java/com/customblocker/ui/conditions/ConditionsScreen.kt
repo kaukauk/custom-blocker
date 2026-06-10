@@ -23,9 +23,7 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -33,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -81,7 +78,6 @@ fun ConditionsScreen(
     // Time-window picker: 0 = closed, 1 = picking start, 2 = picking end.
     var pickerStage by remember { mutableIntStateOf(0) }
     var pendingStart by remember { mutableIntStateOf(0) }
-    var newSsid by remember { mutableStateOf("") }
 
     fun toggleExpand(bit: Int) { expanded = if (expanded == bit) null else bit }
 
@@ -104,8 +100,8 @@ fun ConditionsScreen(
         ) {
             item {
                 Text(
-                    "Blocking applies only when ALL switched-on conditions are met. Leave them all off " +
-                        "to block all the time. Tap a condition to see what it does.",
+                    "This profile is active only when ALL switched-on conditions are met. Leave them all " +
+                        "off to apply all the time. Tap a condition to see what it does.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -124,9 +120,9 @@ fun ConditionsScreen(
                 ConditionCard(
                     icon = Icons.Default.Schedule,
                     title = "Schedule",
-                    description = "Block only on chosen days and time windows.",
+                    description = "This profile is active only on the chosen days and time windows.",
                     enabled = mask and ConditionTypes.TIME != 0,
-                    onToggle = { viewModel.setConditionEnabled(ConditionTypes.TIME, it) },
+                    onToggle = { on -> viewModel.setConditionEnabled(ConditionTypes.TIME, on); if (on) expanded = ConditionTypes.TIME },
                     toggleEnabled = !locked,
                     expanded = expanded == ConditionTypes.TIME,
                     onExpand = { toggleExpand(ConditionTypes.TIME) },
@@ -159,52 +155,11 @@ fun ConditionsScreen(
 
             item {
                 ConditionCard(
-                    icon = Icons.Default.Wifi,
-                    title = "Wi-Fi network",
-                    description = "Block only while connected to specific Wi-Fi networks.",
-                    enabled = mask and ConditionTypes.WIFI != 0,
-                    onToggle = { viewModel.setConditionEnabled(ConditionTypes.WIFI, it) },
-                    toggleEnabled = !locked,
-                    expanded = expanded == ConditionTypes.WIFI,
-                    onExpand = { toggleExpand(ConditionTypes.WIFI) },
-                ) {
-                    state.wifi.forEach { net ->
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(net.ssid)
-                            IconButton(onClick = { viewModel.removeWifi(net.id) }, enabled = !locked) {
-                                Icon(Icons.Default.Delete, contentDescription = "Remove network")
-                            }
-                        }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedTextField(
-                            value = newSsid,
-                            onValueChange = { newSsid = it },
-                            label = { Text("SSID") },
-                            singleLine = true,
-                            enabled = !locked,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Button(onClick = { viewModel.addWifi(newSsid); newSsid = "" }, enabled = !locked) { Text("Add") }
-                    }
-                }
-            }
-
-            item {
-                ConditionCard(
                     icon = Icons.Default.Place,
                     title = "Location",
-                    description = "Block only at (or away from) chosen places.",
+                    description = "This profile is active only at (or away from) chosen places.",
                     enabled = mask and ConditionTypes.LOCATION != 0,
-                    onToggle = { viewModel.setConditionEnabled(ConditionTypes.LOCATION, it) },
+                    onToggle = { on -> viewModel.setConditionEnabled(ConditionTypes.LOCATION, on); if (on) expanded = ConditionTypes.LOCATION },
                     toggleEnabled = !locked,
                     expanded = expanded == ConditionTypes.LOCATION,
                     onExpand = { toggleExpand(ConditionTypes.LOCATION) },
@@ -235,9 +190,9 @@ fun ConditionsScreen(
                 ConditionCard(
                     icon = Icons.Default.Timer,
                     title = "Usage time limit",
-                    description = "Allow a set amount of use per hour or day, then block until it resets.",
+                    description = "Allow a set amount of use per hour or day — once it's used up this profile blocks until it resets.",
                     enabled = mask and ConditionTypes.USAGE_LIMIT != 0,
-                    onToggle = { viewModel.toggleUsage(it) },
+                    onToggle = { on -> viewModel.toggleUsage(on); if (on) expanded = ConditionTypes.USAGE_LIMIT },
                     toggleEnabled = !locked,
                     expanded = expanded == ConditionTypes.USAGE_LIMIT,
                     onExpand = { toggleExpand(ConditionTypes.USAGE_LIMIT) },
@@ -258,9 +213,9 @@ fun ConditionsScreen(
                 ConditionCard(
                     icon = Icons.Default.PhoneAndroid,
                     title = "Launch limit",
-                    description = "Allow a set number of opens per hour or day, then block until it resets.",
+                    description = "Allow a set number of opens per hour or day — after that this profile blocks until it resets.",
                     enabled = mask and ConditionTypes.LAUNCH_COUNT != 0,
-                    onToggle = { viewModel.toggleLaunch(it) },
+                    onToggle = { on -> viewModel.toggleLaunch(on); if (on) expanded = ConditionTypes.LAUNCH_COUNT },
                     toggleEnabled = !locked,
                     expanded = expanded == ConditionTypes.LAUNCH_COUNT,
                     onExpand = { toggleExpand(ConditionTypes.LAUNCH_COUNT) },
@@ -280,14 +235,31 @@ fun ConditionsScreen(
                 ConditionCard(
                     icon = Icons.Default.BatteryChargingFull,
                     title = "Charging",
-                    description = "Block only while the device is plugged in and charging.",
+                    description = if (state.chargerInverted)
+                        "This profile is active only while the device is NOT plugged in and charging."
+                    else
+                        "This profile is active only while the device is plugged in and charging.",
                     enabled = mask and ConditionTypes.CHARGER != 0,
-                    onToggle = { viewModel.setConditionEnabled(ConditionTypes.CHARGER, it) },
+                    onToggle = { on -> viewModel.setConditionEnabled(ConditionTypes.CHARGER, on); if (on) expanded = ConditionTypes.CHARGER },
                     toggleEnabled = !locked,
                     expanded = expanded == ConditionTypes.CHARGER,
                     onExpand = { toggleExpand(ConditionTypes.CHARGER) },
-                    editor = null,
-                )
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !state.chargerInverted,
+                            onClick = { viewModel.setChargerInverted(false) },
+                            label = { Text("While charging") },
+                            enabled = !locked,
+                        )
+                        FilterChip(
+                            selected = state.chargerInverted,
+                            onClick = { viewModel.setChargerInverted(true) },
+                            label = { Text("While not charging") },
+                            enabled = !locked,
+                        )
+                    }
+                }
             }
         }
     }

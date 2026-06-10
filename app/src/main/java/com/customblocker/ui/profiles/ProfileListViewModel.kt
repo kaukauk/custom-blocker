@@ -122,9 +122,8 @@ class ProfileListViewModel @Inject constructor(
         val parts = mutableListOf(if (rule.mode == BlockingMode.ALLOWLIST) "Allow list" else "Block list")
         val m = rule.conditionsMask
         if (m and ConditionTypes.TIME != 0) parts += "Schedule"
-        if (m and ConditionTypes.WIFI != 0) parts += "Wi-Fi"
         if (m and ConditionTypes.LOCATION != 0) parts += "Location"
-        if (m and ConditionTypes.CHARGER != 0) parts += "Charging"
+        if (m and ConditionTypes.CHARGER != 0) parts += if (rule.chargerInverted) "Not charging" else "Charging"
         if (usageOn) {
             val limitMin = rule.usageLimit!!.limitSeconds / 60
             val per = period(rule.usageLimit!!.period)

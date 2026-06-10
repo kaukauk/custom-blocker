@@ -27,6 +27,8 @@ data class ConditionsUiState(
     val usageDaily: Boolean = true,
     val launchCount: Int? = null,
     val launchDaily: Boolean = true,
+    /** Charging condition sense: false = active while charging, true = active while NOT charging. */
+    val chargerInverted: Boolean = false,
 )
 
 @HiltViewModel
@@ -63,12 +65,18 @@ class ConditionsViewModel @Inject constructor(
             usageDaily = usage?.periodDaily ?: true,
             launchCount = launch?.amount,
             launchDaily = launch?.periodDaily ?: true,
+            chargerInverted = profile?.chargerInverted ?: false,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConditionsUiState())
 
     fun setConditionEnabled(bit: Int, enabled: Boolean) = viewModelScope.launch {
         if (locked) return@launch
         repository.setConditionEnabled(profileId, bit, enabled)
+    }
+
+    fun setChargerInverted(inverted: Boolean) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.setChargerInverted(profileId, inverted)
     }
 
     fun toggleDay(dayBit: Int) = viewModelScope.launch {

@@ -31,11 +31,18 @@ object DataModule {
         }
     }
 
+    /** v9→v10: add profiles.chargerInverted (charging-condition inverse sense). Preserves user data. */
+    private val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE profiles ADD COLUMN chargerInverted INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): BlockerDatabase =
         Room.databaseBuilder(context, BlockerDatabase::class.java, "blocker.db")
-            .addMigrations(MIGRATION_7_8, MIGRATION_8_9)
+            .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
             // Dev convenience backstop for older churn; real migrations are added per-version above.
             .fallbackToDestructiveMigration()
             .build()
