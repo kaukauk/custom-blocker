@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -119,31 +120,31 @@ fun SettingsScreen(
                 )
                 PermissionRow(
                     label = "Accessibility",
-                    subtitle = "Detects which app is in the foreground so it can be blocked.",
+                    subtitle = "To detect which app is in the foreground and block it.",
                     granted = accessibilityOn,
                     onClick = { Permissions.openAccessibilitySettings(context) },
                 )
                 PermissionRow(
                     label = "Display over other apps",
-                    subtitle = "Shows the block screen on top of a blocked app.",
+                    subtitle = "To show the block screen on top of a blocked app.",
                     granted = overlayOn,
                     onClick = { Permissions.openOverlaySettings(context) },
                 )
                 PermissionRow(
                     label = "Notification access",
-                    subtitle = "Hides or batches notifications from blocked apps.",
+                    subtitle = "Lets the app hide or batch notifications from blocked apps.",
                     granted = notificationOn,
                     onClick = { Permissions.openNotificationAccessSettings(context) },
                 )
                 PermissionRow(
                     label = "Run without battery limits",
-                    subtitle = "Stops Android pausing blocking in the background.",
+                    subtitle = "Keeps blocking running in the background.",
                     granted = batteryExempt,
                     onClick = { Permissions.openBatteryOptimizationSettings(context) },
                 )
                 PermissionRow(
                     label = "Device admin",
-                    subtitle = "Uninstall protection · Strict Mode level 2 and up.",
+                    subtitle = "Powers uninstall protection · Strict Mode level 2 and up.",
                     granted = deviceAdminActive,
                     onClick = { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) },
                 )
@@ -159,8 +160,8 @@ fun SettingsScreen(
 @Composable
 private fun PermissionRow(label: String, granted: Boolean, onClick: () -> Unit, subtitle: String? = null) {
     Row(
-        Modifier.fillMaxWidth().clickable { onClick() },
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -168,13 +169,18 @@ private fun PermissionRow(label: String, granted: Boolean, onClick: () -> Unit, 
             contentDescription = if (granted) "Granted" else "Not granted",
             tint = if (granted) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
         )
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
             if (subtitle != null) {
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp),   // hanging indent under the name
                 )
             }
         }
