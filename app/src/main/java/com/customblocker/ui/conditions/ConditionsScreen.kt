@@ -235,10 +235,17 @@ fun ConditionsScreen(
                 ConditionCard(
                     icon = Icons.Default.BatteryChargingFull,
                     title = "Charging",
-                    description = if (state.chargerInverted)
-                        "This profile is active only while the device is NOT plugged in and charging."
-                    else
-                        "This profile is active only while the device is plugged in and charging.",
+                    description = when {
+                        // Off: explain it can go either way so the user knows the choice exists.
+                        mask and ConditionTypes.CHARGER == 0 ->
+                            "This profile can be active only while the device is charging, or only " +
+                                "while it is NOT charging — pick which once you turn this on."
+                        // On: match the actual chosen behaviour, no vagueness.
+                        state.chargerInverted ->
+                            "This profile is active only while the device is NOT charging."
+                        else ->
+                            "This profile is active only while the device is charging."
+                    },
                     enabled = mask and ConditionTypes.CHARGER != 0,
                     onToggle = { on -> viewModel.setConditionEnabled(ConditionTypes.CHARGER, on); if (on) expanded = ConditionTypes.CHARGER },
                     toggleEnabled = !locked,
