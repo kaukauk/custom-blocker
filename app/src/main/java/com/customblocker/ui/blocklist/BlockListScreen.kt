@@ -13,10 +13,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -41,11 +49,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.customblocker.domain.engine.BlockingMode
+import com.customblocker.domain.engine.ConditionTypes
 import com.customblocker.domain.engine.UrlMatchType
 import com.customblocker.ui.components.AppIcon
 import com.customblocker.ui.onboarding.PermissionBanner
@@ -76,7 +86,6 @@ fun BlockListScreen(
     val notificationAccess by com.customblocker.ui.onboarding.rememberNotificationAccessState()
 
     var blockedTab by remember { mutableIntStateOf(0) } // 0 = Apps, 1 = Websites, 2 = Keywords
-    var pendingDeleteCondition by remember { mutableStateOf<ConditionSummary?>(null) }
 
     if (showUnlock) {
         UnlockDialog(
@@ -124,43 +133,51 @@ fun BlockListScreen(
                 }
             }
 
-            // Conditions (when this profile is active)
+            // Conditions get their own emphasised card — they're what actually controls the blocking.
             item {
-                Text("Conditions", style = MaterialTheme.typography.titleSmall)
-                HorizontalDivider(Modifier.padding(top = 4.dp))
-            }
-            if (state.conditions.isEmpty()) {
-                item {
-                    Text(
-                        "No conditions — this profile is always active.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                items(state.conditions, key = { "cond:${it.bit}" }) { cond ->
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(cond.title, style = MaterialTheme.typography.bodyLarge)
-                            Text(cond.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ),
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Text("When this profile blocks", style = MaterialTheme.typography.titleMedium)
                         }
-                        IconButton(onClick = { pendingDeleteCondition = cond }, enabled = !editLocked) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove condition")
+                        if (state.conditions.isEmpty()) {
+                            Text(
+                                "No conditions set — this profile is always active.",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        } else {
+                            state.conditions.forEach { cond ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(conditionIcon(cond.bit), contentDescription = null, modifier = Modifier.size(24.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(cond.title, style = MaterialTheme.typography.bodyLarge)
+                                        Text(cond.detail, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
+                            }
+                        }
+                        FilledTonalButton(onClick = onOpenConditions, modifier = Modifier.fillMaxWidth()) {
+                            Text("Edit conditions")
                         }
                     }
                 }
             }
-            item {
-                OutlinedButton(onClick = onOpenConditions, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("  Edit conditions")
-                }
-            }
 
+            item {
+                Text("Behavior", style = MaterialTheme.typography.titleSmall)
+                HorizontalDivider(Modifier.padding(top = 4.dp))
+            }
             item {
                 ToggleRow(
                     title = "Block notifications",
@@ -259,21 +276,6 @@ fun BlockListScreen(
                 else -> keywordsTab(state, editLocked, viewModel)
             }
         }
-    }
-
-    pendingDeleteCondition?.let { cond ->
-        AlertDialog(
-            onDismissRequest = { pendingDeleteCondition = null },
-            title = { Text("Remove ${cond.title}?") },
-            text = { Text("This profile will no longer use the \"${cond.title}\" condition.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteCondition(cond.bit)
-                    pendingDeleteCondition = null
-                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { pendingDeleteCondition = null }) { Text("Cancel") } },
-        )
     }
 }
 
@@ -433,6 +435,15 @@ private fun RuleRow(value: String, subtitle: String, enabled: Boolean, onRemove:
             Icon(Icons.Default.Delete, contentDescription = "Remove")
         }
     }
+}
+
+private fun conditionIcon(bit: Int): ImageVector = when (bit) {
+    ConditionTypes.TIME -> Icons.Default.Schedule
+    ConditionTypes.WIFI -> Icons.Default.Wifi
+    ConditionTypes.LOCATION -> Icons.Default.Place
+    ConditionTypes.USAGE_LIMIT -> Icons.Default.Timer
+    ConditionTypes.LAUNCH_COUNT -> Icons.Default.PhoneAndroid
+    else -> Icons.Default.BatteryChargingFull
 }
 
 @Composable

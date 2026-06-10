@@ -143,12 +143,6 @@ class BlockListViewModel @Inject constructor(
         repository.setMode(profileId, mode)
     }
 
-    // Removing a condition is frozen while locked (conditions gate when blocking applies).
-    fun deleteCondition(bit: Int) = viewModelScope.launch {
-        if (locked) return@launch
-        repository.setConditionEnabled(profileId, bit, false)
-    }
-
     // Locked: blocklist removals lower restrictiveness (blocked); allowlist removals raise it (ok).
     fun removeApp(packageName: String) = viewModelScope.launch {
         if (locked && !isAllowlist) return@launch
