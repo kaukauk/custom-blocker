@@ -62,7 +62,7 @@ fun ProfileListScreen(
     val locked = lock.locked
     val lockInfo by viewModel.lockInfo.collectAsStateWithLifecycle()
     var showUnlock by remember { mutableStateOf(false) }
-    var pendingDelete by remember { mutableStateOf<com.customblocker.data.db.ProfileEntity?>(null) }
+    var pendingDelete by remember { mutableStateOf<ProfileRow?>(null) }
     val earnUnlock = com.customblocker.ui.strict.rememberEarnUnlockLauncher(lock.config)
 
     if (showUnlock) {
@@ -124,10 +124,7 @@ fun ProfileListScreen(
                         Column(Modifier.weight(1f)) {
                             Text(profile.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                buildString {
-                                    append(if (profile.blockingMode == 1) "Allow list" else "Block list")
-                                    if (profile.conditionsMask != 0) append(" • conditional")
-                                },
+                                profile.summary,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }

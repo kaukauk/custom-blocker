@@ -93,6 +93,9 @@ class BlockerRepository @Inject constructor(
     // --- profile list / lifecycle ---
     fun observeProfiles(): Flow<List<ProfileEntity>> = dao.observeAllProfiles()
 
+    /** All usage/launch limit rows across every profile (for the profile-list summaries). */
+    fun observeAllUsageLimits(): Flow<List<UsageLimitEntity>> = dao.observeAllUsageLimits()
+
     suspend fun createProfile(title: String): Long =
         dao.insertProfile(ProfileEntity(title = title.ifBlank { "Profile" }, enabled = true, blockingMode = 0))
 

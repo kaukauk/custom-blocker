@@ -9,7 +9,6 @@ import com.customblocker.data.db.WifiNetworkEntity
 import com.customblocker.data.repo.BlockerRepository
 import com.customblocker.domain.engine.ConditionTypes
 import com.customblocker.domain.strict.ProfileLockState
-import com.customblocker.service.conditions.UsageTracker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,15 +27,11 @@ data class ConditionsUiState(
     val usageDaily: Boolean = true,
     val launchCount: Int? = null,
     val launchDaily: Boolean = true,
-    /** Live progress toward the limits this period (for diagnostics / display). */
-    val usageUsedSeconds: Int = 0,
-    val launchesUsed: Int = 0,
 )
 
 @HiltViewModel
 class ConditionsViewModel @Inject constructor(
     private val repository: BlockerRepository,
-    usageTracker: UsageTracker,
     profileLockState: ProfileLockState,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -49,7 +44,7 @@ class ConditionsViewModel @Inject constructor(
 
     private val locked get() = editLocked.value
 
-    private val config = combine(
+    val state: StateFlow<ConditionsUiState> = combine(
         repository.observeProfile(profileId),
         repository.observeIntervals(profileId),
         repository.observeWifi(profileId),
@@ -68,14 +63,6 @@ class ConditionsViewModel @Inject constructor(
             usageDaily = usage?.periodDaily ?: true,
             launchCount = launch?.amount,
             launchDaily = launch?.periodDaily ?: true,
-        )
-    }
-
-    val state: StateFlow<ConditionsUiState> = combine(config, usageTracker.live) {
-            ui: ConditionsUiState, live: Pair<Map<Long, Int>, Map<Long, Int>> ->
-        ui.copy(
-            usageUsedSeconds = live.first[profileId] ?: 0,
-            launchesUsed = live.second[profileId] ?: 0,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConditionsUiState())
 
