@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -75,6 +76,7 @@ fun BlockListScreen(
     val notificationAccess by com.customblocker.ui.onboarding.rememberNotificationAccessState()
 
     var blockedTab by remember { mutableIntStateOf(0) } // 0 = Apps, 1 = Websites, 2 = Keywords
+    var pendingDeleteCondition by remember { mutableStateOf<ConditionSummary?>(null) }
 
     if (showUnlock) {
         UnlockDialog(
@@ -93,6 +95,15 @@ fun BlockListScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    // Whole-profile on/off — self-explanatory, lives on the bar. Can't switch off while locked.
+                    Switch(
+                        checked = state.enabled,
+                        onCheckedChange = { viewModel.setEnabled(it) },
+                        enabled = !(editLocked && state.enabled),
+                        modifier = Modifier.padding(end = 12.dp),
+                    )
                 },
             )
         },
@@ -113,38 +124,43 @@ fun BlockListScreen(
                 }
             }
 
-            // Blocking on/off
+            // Conditions (when this profile is active)
             item {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column {
-                        Text("Blocking", style = MaterialTheme.typography.titleMedium)
-                        Text(if (state.enabled) "On" else "Off", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Switch(
-                        checked = state.enabled,
-                        onCheckedChange = { viewModel.setEnabled(it) },
-                        enabled = !(editLocked && state.enabled),
+                Text("Conditions", style = MaterialTheme.typography.titleSmall)
+                HorizontalDivider(Modifier.padding(top = 4.dp))
+            }
+            if (state.conditions.isEmpty()) {
+                item {
+                    Text(
+                        "No conditions — this profile is always active.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            } else {
+                items(state.conditions, key = { "cond:${it.bit}" }) { cond ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(cond.title, style = MaterialTheme.typography.bodyLarge)
+                            Text(cond.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = { pendingDeleteCondition = cond }, enabled = !editLocked) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove condition")
+                        }
+                    }
+                }
             }
-
-            // Conditions entry
             item {
                 OutlinedButton(onClick = onOpenConditions, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("  Conditions (when to block)")
+                    Text("  Edit conditions")
                 }
             }
 
-            // Behavior
-            item {
-                Text("Behavior", style = MaterialTheme.typography.titleSmall)
-                HorizontalDivider(Modifier.padding(top = 4.dp))
-            }
             item {
                 ToggleRow(
                     title = "Block notifications",
@@ -218,14 +234,20 @@ fun BlockListScreen(
                 )
             }
 
-            // Blocked content tabs
+            // Blocked content tabs — counts in the label; no check tick (it implied "only this is blocked").
             item {
+                val tabs = listOf(
+                    "Apps (${state.apps.size})",
+                    "Websites (${state.websites.size})",
+                    "Keywords (${state.keywords.size})",
+                )
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    listOf("Apps", "Websites", "Keywords").forEachIndexed { i, label ->
+                    tabs.forEachIndexed { i, label ->
                         SegmentedButton(
                             selected = blockedTab == i,
                             onClick = { blockedTab = i },
                             shape = SegmentedButtonDefaults.itemShape(i, 3),
+                            icon = {},
                         ) { Text(label) }
                     }
                 }
@@ -237,6 +259,21 @@ fun BlockListScreen(
                 else -> keywordsTab(state, editLocked, viewModel)
             }
         }
+    }
+
+    pendingDeleteCondition?.let { cond ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteCondition = null },
+            title = { Text("Remove ${cond.title}?") },
+            text = { Text("This profile will no longer use the \"${cond.title}\" condition.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteCondition(cond.bit)
+                    pendingDeleteCondition = null
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { pendingDeleteCondition = null }) { Text("Cancel") } },
+        )
     }
 }
 

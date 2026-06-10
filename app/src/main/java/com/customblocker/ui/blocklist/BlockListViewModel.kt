@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.customblocker.data.db.WebsiteEntity
 import com.customblocker.data.repo.BlockerRepository
 import com.customblocker.domain.engine.BlockingMode
+import com.customblocker.domain.engine.ConditionTypes
+import com.customblocker.domain.engine.LimitPeriod
+import com.customblocker.domain.engine.ProfileRule
 import com.customblocker.domain.engine.UrlMatchType
 import com.customblocker.domain.strict.ProfileLockState
 import com.customblocker.ui.AppLister
@@ -14,9 +17,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/** An active condition shown on the profile screen: its name + the variables the user set. */
+data class ConditionSummary(val bit: Int, val title: String, val detail: String)
 
 data class BlockListUiState(
     val title: String = "",
@@ -31,6 +38,8 @@ data class BlockListUiState(
     val blockNotifications: Boolean = false,
     /** When blocking notifications: true = batch (hold & re-deliver), false = hide. */
     val batchNotifications: Boolean = false,
+    /** Currently-enabled conditions, summarised for the profile screen. */
+    val conditions: List<ConditionSummary> = emptyList(),
 )
 
 @HiltViewModel
@@ -50,12 +59,15 @@ class BlockListViewModel @Inject constructor(
     private val locked get() = editLocked.value
     private val isAllowlist get() = state.value.mode == BlockingMode.ALLOWLIST
 
+    private val rule = repository.profileRules().map { rules -> rules.find { it.id == profileId } }
+
     val state: StateFlow<BlockListUiState> =
         combine(
             repository.observeProfile(profileId),
             repository.observeApps(profileId),
             repository.observeWebsites(profileId),
-        ) { profile, apps, sites ->
+            rule,
+        ) { profile, apps, sites, rule ->
             val keywordType = UrlMatchType.KEYWORD.ordinal
             BlockListUiState(
                 title = profile?.title ?: "",
@@ -67,8 +79,57 @@ class BlockListViewModel @Inject constructor(
                 blockUnsupportedBrowsers = profile?.blockUnsupportedBrowsers ?: false,
                 blockNotifications = profile?.blockNotifications ?: false,
                 batchNotifications = profile?.batchNotifications ?: false,
+                conditions = summarizeConditions(rule),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BlockListUiState())
+
+    private fun summarizeConditions(rule: ProfileRule?): List<ConditionSummary> {
+        if (rule == null) return emptyList()
+        val m = rule.conditionsMask
+        val out = mutableListOf<ConditionSummary>()
+        if (m and ConditionTypes.TIME != 0) {
+            val days = daysDetail(rule.dayFlags)
+            val windows = rule.timeWindows.joinToString(", ") { "${hhmm(it.fromMinuteOfDay)}–${hhmm(it.toMinuteOfDay)}" }
+            out += ConditionSummary(ConditionTypes.TIME, "Schedule", listOf(days, windows).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "any time" })
+        }
+        if (m and ConditionTypes.WIFI != 0) {
+            out += ConditionSummary(ConditionTypes.WIFI, "Wi-Fi", rule.wifiSsids.joinToString(", ").ifBlank { "any network" })
+        }
+        if (m and ConditionTypes.LOCATION != 0) {
+            val n = rule.geofences.size
+            out += ConditionSummary(ConditionTypes.LOCATION, "Location", if (n == 1) "1 place" else "$n places")
+        }
+        if (m and ConditionTypes.USAGE_LIMIT != 0 && rule.usageLimit != null) {
+            out += ConditionSummary(ConditionTypes.USAGE_LIMIT, "Usage time limit", "${durationDetail(rule.usageLimit.limitSeconds)} ${periodDetail(rule.usageLimit.period)}")
+        }
+        if (m and ConditionTypes.LAUNCH_COUNT != 0 && rule.launchLimit != null) {
+            val n = rule.launchLimit.limit
+            out += ConditionSummary(ConditionTypes.LAUNCH_COUNT, "Launch limit", "$n ${if (n == 1) "launch" else "launches"} ${periodDetail(rule.launchLimit.period)}")
+        }
+        if (m and ConditionTypes.CHARGER != 0) {
+            out += ConditionSummary(ConditionTypes.CHARGER, "Charging", "while plugged in")
+        }
+        return out
+    }
+
+    private fun daysDetail(flags: Int): String {
+        val all = listOf("Mon" to 1, "Tue" to 2, "Wed" to 4, "Thu" to 8, "Fri" to 16, "Sat" to 32, "Sun" to 64)
+        val on = all.filter { flags and it.second != 0 }.map { it.first }
+        return when {
+            on.size == 7 -> "Every day"
+            on.isEmpty() -> "No days"
+            else -> on.joinToString(", ")
+        }
+    }
+
+    private fun durationDetail(seconds: Int): String {
+        val m = seconds / 60
+        return if (m >= 60 && m % 60 != 0) "${m / 60}h ${m % 60}m" else if (m >= 60) "${m / 60}h" else "$m min"
+    }
+
+    private fun periodDetail(p: LimitPeriod) = if (p == LimitPeriod.DAILY) "per day" else "per hour"
+
+    private fun hhmm(minuteOfDay: Int): String = "%02d:%02d".format(minuteOfDay / 60, minuteOfDay % 60)
 
     // Locked: can enable a profile (more blocking) but not disable it.
     fun setEnabled(enabled: Boolean) = viewModelScope.launch {
@@ -80,6 +141,12 @@ class BlockListViewModel @Inject constructor(
     fun setMode(mode: BlockingMode) = viewModelScope.launch {
         if (locked) return@launch
         repository.setMode(profileId, mode)
+    }
+
+    // Removing a condition is frozen while locked (conditions gate when blocking applies).
+    fun deleteCondition(bit: Int) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.setConditionEnabled(profileId, bit, false)
     }
 
     // Locked: blocklist removals lower restrictiveness (blocked); allowlist removals raise it (ok).
