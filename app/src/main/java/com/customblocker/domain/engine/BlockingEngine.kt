@@ -1,5 +1,7 @@
 package com.customblocker.domain.engine
 
+import java.time.Instant
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -7,6 +9,16 @@ import javax.inject.Singleton
 sealed interface BlockDecision {
     data class Block(val packageName: String, val reason: String) : BlockDecision
     data object Allow : BlockDecision
+}
+
+/** What to do with a notification from a targeted app right now. */
+sealed interface NotificationAction {
+    /** Let it through. */
+    data object Allow : NotificationAction
+    /** Drop it silently. */
+    data object Hide : NotificationAction
+    /** Snooze it until [untilMillis] (when the blocking profile next stops restricting). */
+    data class Batch(val untilMillis: Long) : NotificationAction
 }
 
 enum class BlockingMode { BLOCKLIST, ALLOWLIST }
@@ -80,6 +92,64 @@ class BlockingEngine @Inject constructor() {
         return profiles.any { rule ->
             rule.blockNotifications && rule.targets(packageName) && ConditionEvaluator.isActive(rule, ctx)
         }
+    }
+
+    /**
+     * Richer notification decision: which [NotificationAction] applies to [packageName] now.
+     * Hide wins if any blocking profile suppresses; otherwise (all batch) we snooze until the
+     * soonest one stops restricting (e.g. the top of the hour for a 5-min/hour usage limit).
+     * [dayStartHour] sets when "per day" limits roll over.
+     */
+    fun notificationAction(packageName: String?, ctx: BlockContext, dayStartHour: Int): NotificationAction {
+        if (packageName.isNullOrBlank()) return NotificationAction.Allow
+        if (isNeverBlocked(packageName)) return NotificationAction.Allow
+        val matching = profiles.filter {
+            it.blockNotifications && it.targets(packageName) && ConditionEvaluator.isActive(it, ctx)
+        }
+        if (matching.isEmpty()) return NotificationAction.Allow
+        if (matching.any { !it.batchNotifications }) return NotificationAction.Hide
+        // All matching profiles batch: hold until the soonest stops restricting. If none of them is
+        // time-bounded (e.g. an always-on block list), we can't hold forever → hide instead.
+        val until = matching.mapNotNull { deactivationMillis(it, ctx, dayStartHour) }.minOrNull()
+            ?: return NotificationAction.Hide
+        return NotificationAction.Batch(until)
+    }
+
+    /** Soonest wall-clock instant [rule] (currently active) stops restricting, from time conditions. */
+    private fun deactivationMillis(rule: ProfileRule, ctx: BlockContext, dayStartHour: Int): Long? {
+        val candidates = mutableListOf<Long>()
+        if (rule.conditionsMask and ConditionTypes.USAGE_LIMIT != 0 && rule.usageLimit != null) {
+            candidates += nextPeriodReset(rule.usageLimit.period, ctx.nowMillis, dayStartHour)
+        }
+        if (rule.conditionsMask and ConditionTypes.LAUNCH_COUNT != 0 && rule.launchLimit != null) {
+            candidates += nextPeriodReset(rule.launchLimit.period, ctx.nowMillis, dayStartHour)
+        }
+        if (rule.conditionsMask and ConditionTypes.TIME != 0) {
+            windowEndMillis(rule, ctx)?.let { candidates += it }
+        }
+        return candidates.minOrNull()
+    }
+
+    private fun nextPeriodReset(period: LimitPeriod, nowMillis: Long, dayStartHour: Int): Long = when (period) {
+        LimitPeriod.HOURLY -> (nowMillis / 3_600_000L + 1) * 3_600_000L
+        LimitPeriod.DAILY -> {
+            val zone = ZoneId.systemDefault()
+            val now = Instant.ofEpochMilli(nowMillis).atZone(zone)
+            var start = now.toLocalDate().atTime(dayStartHour, 0).atZone(zone)
+            if (!start.isAfter(now)) start = start.plusDays(1)
+            start.toInstant().toEpochMilli()
+        }
+    }
+
+    /** End of the currently-active time window (handles wrap past midnight), as wall-clock millis. */
+    private fun windowEndMillis(rule: ProfileRule, ctx: BlockContext): Long? {
+        val window = rule.timeWindows.firstOrNull { it.contains(ctx.minuteOfDay) } ?: return null
+        val zone = ZoneId.systemDefault()
+        val now = Instant.ofEpochMilli(ctx.nowMillis).atZone(zone)
+        val end = window.toMinuteOfDay
+        var endTime = now.toLocalDate().atTime(end / 60, end % 60).atZone(zone)
+        if (!endTime.isAfter(now)) endTime = endTime.plusDays(1)
+        return endTime.toInstant().toEpochMilli()
     }
 
     /**

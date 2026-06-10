@@ -24,11 +24,18 @@ object DataModule {
         }
     }
 
+    /** v8→v9: add profiles.batchNotifications (snooze-and-redeliver vs hide). Preserves user data. */
+    private val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE profiles ADD COLUMN batchNotifications INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): BlockerDatabase =
         Room.databaseBuilder(context, BlockerDatabase::class.java, "blocker.db")
-            .addMigrations(MIGRATION_7_8)
+            .addMigrations(MIGRATION_7_8, MIGRATION_8_9)
             // Dev convenience backstop for older churn; real migrations are added per-version above.
             .fallbackToDestructiveMigration()
             .build()

@@ -23,6 +23,8 @@ data class BlockListUiState(
     val apps: List<InstalledApp> = emptyList(),
     val blockLaunch: Boolean = true,
     val blockNotifications: Boolean = false,
+    /** When blocking notifications: true = batch (hold & re-deliver), false = hide. */
+    val batchNotifications: Boolean = false,
     val addNewApps: Boolean = false,
 )
 
@@ -52,6 +54,7 @@ class BlockListViewModel @Inject constructor(
                 apps = apps.map { InstalledApp(it.packageName, lister.label(it.packageName)) },
                 blockLaunch = profile?.blockLaunch ?: true,
                 blockNotifications = profile?.blockNotifications ?: false,
+                batchNotifications = profile?.batchNotifications ?: false,
                 addNewApps = profile?.addNewApps ?: false,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BlockListUiState())
@@ -82,6 +85,11 @@ class BlockListViewModel @Inject constructor(
     fun setBlockNotifications(v: Boolean) = viewModelScope.launch {
         if (locked && !v) return@launch
         repository.setBlockNotifications(profileId, v)
+    }
+    // Batch (hold & re-deliver) is less restrictive than hide, so locked profiles can't switch it on.
+    fun setBatchNotifications(v: Boolean) = viewModelScope.launch {
+        if (locked && v) return@launch
+        repository.setBatchNotifications(profileId, v)
     }
     fun setAddNewApps(v: Boolean) = viewModelScope.launch {
         if (locked && !v) return@launch

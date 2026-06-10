@@ -3,6 +3,7 @@ package com.customblocker.ui.profiles
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -56,6 +58,7 @@ fun ProfileListScreen(
     onOpenProfile: (Long) -> Unit,
     onOpenStrictMode: () -> Unit,
     onOpenStats: () -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: ProfileListViewModel = hiltViewModel(),
     lockViewModel: LockViewModel = hiltViewModel(),
 ) {
@@ -90,6 +93,9 @@ fun ProfileListScreen(
                     }
                     IconButton(onClick = onOpenStrictMode) {
                         Icon(Icons.Default.Lock, contentDescription = "Strict Mode")
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 },
             )
@@ -161,10 +167,11 @@ fun ProfileListScreen(
                             )
                         }
                         var menuOpen by remember { mutableStateOf(false) }
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Options")
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             if (profile.paused) {
                                 DropdownMenuItem(
                                     text = { Text("Resume now") },
@@ -193,6 +200,7 @@ fun ProfileListScreen(
                                 enabled = !pLocked,
                                 onClick = { menuOpen = false; pendingDelete = profile },
                             )
+                            }
                         }
                     }
                 }

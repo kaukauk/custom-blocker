@@ -42,6 +42,7 @@ data class ProfileRow(
 class ProfileListViewModel @Inject constructor(
     private val repository: BlockerRepository,
     private val contextProvider: ContextProvider,
+    private val appSettings: com.customblocker.data.prefs.AppSettingsStore,
     usageTracker: UsageTracker,
     profileLockState: ProfileLockState,
 ) : ViewModel() {
@@ -87,9 +88,9 @@ class ProfileListViewModel @Inject constructor(
         profileLockState.lockInfo()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileLockState.LockInfo(false))
 
-    /** Creates a profile and returns its id to the caller (to navigate into it). */
+    /** Creates a profile (in the configured default mode) and returns its id to the caller. */
     fun createProfile(title: String, onCreated: (Long) -> Unit) = viewModelScope.launch {
-        onCreated(repository.createProfile(title))
+        onCreated(repository.createProfile(title, appSettings.defaultAllowlist))
     }
 
     /** Pause a profile for [durationMillis]. Blocked while Strict Mode is active (would un-restrict). */

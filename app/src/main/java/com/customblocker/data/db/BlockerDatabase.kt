@@ -15,7 +15,7 @@ import androidx.room.RoomDatabase
         UsageCounterEntity::class,
         DailyStatEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 abstract class BlockerDatabase : RoomDatabase() {

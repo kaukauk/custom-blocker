@@ -73,6 +73,8 @@ data class ProfileRule(
     val blockLaunch: Boolean = true,
     /** Suppress notifications from targeted apps while active. */
     val blockNotifications: Boolean = false,
+    /** When blocking notifications: true = batch (snooze until next reset), false = hide. */
+    val batchNotifications: Boolean = false,
     /** Temporarily inactive until this wall-clock instant (0 = not paused). */
     val pausedUntilMillis: Long = 0,
 ) {

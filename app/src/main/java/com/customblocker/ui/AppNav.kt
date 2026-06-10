@@ -11,6 +11,7 @@ import com.customblocker.ui.conditions.ConditionsScreen
 import com.customblocker.ui.map.MapPickerScreen
 import com.customblocker.ui.picker.AppPickerScreen
 import com.customblocker.ui.profiles.ProfileListScreen
+import com.customblocker.ui.settings.SettingsScreen
 import com.customblocker.ui.stats.StatsScreen
 import com.customblocker.ui.strict.StrictModeScreen
 import com.customblocker.ui.websites.WebsiteScreen
@@ -24,6 +25,7 @@ object Routes {
     const val WEBSITES = "websites/{profileId}"
     const val STRICT = "strict"
     const val STATS = "stats"
+    const val SETTINGS = "settings"
 
     fun profile(id: Long) = "profile/$id"
     fun picker(id: Long) = "picker/$id"
@@ -43,6 +45,7 @@ fun AppNav() {
                 onOpenProfile = { id -> navController.navigate(Routes.profile(id)) },
                 onOpenStrictMode = { navController.navigate(Routes.STRICT) },
                 onOpenStats = { navController.navigate(Routes.STATS) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
         composable(Routes.PROFILE, arguments = profileIdArg) { entry ->
@@ -75,6 +78,9 @@ fun AppNav() {
         }
         composable(Routes.STATS) {
             StatsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

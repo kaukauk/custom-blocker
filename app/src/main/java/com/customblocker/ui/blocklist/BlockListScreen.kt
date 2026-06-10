@@ -177,11 +177,38 @@ fun BlockListScreen(
                 item {
                     ToggleRow(
                         title = "Block notifications",
-                        subtitle = "Silently dismiss notifications from blocked apps (needs notification access).",
+                        subtitle = "Hold back notifications from blocked apps while this profile is restricting (needs notification access).",
                         checked = state.blockNotifications,
                         enabled = !(editLocked && state.blockNotifications),
                         onCheckedChange = viewModel::setBlockNotifications,
                     )
+                }
+                if (state.blockNotifications) {
+                    item {
+                        Column(Modifier.padding(start = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(
+                                    selected = !state.batchNotifications,
+                                    onClick = { viewModel.setBatchNotifications(false) },
+                                    label = { Text("Hide them") },
+                                    enabled = !editLocked,
+                                )
+                                FilterChip(
+                                    selected = state.batchNotifications,
+                                    onClick = { viewModel.setBatchNotifications(true) },
+                                    label = { Text("Batch until active") },
+                                    enabled = !(editLocked && !state.batchNotifications),
+                                )
+                            }
+                            Text(
+                                if (state.batchNotifications)
+                                    "Notifications are held and delivered when time resets (e.g. the top of the hour)."
+                                else "Notifications are dismissed and never shown.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
                 if (state.blockNotifications && !notificationAccess) {
                     item {

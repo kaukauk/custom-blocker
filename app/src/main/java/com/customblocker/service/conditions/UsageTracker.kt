@@ -1,5 +1,6 @@
 package com.customblocker.service.conditions
 
+import com.customblocker.data.prefs.AppSettingsStore
 import com.customblocker.data.repo.BlockerRepository
 import com.customblocker.domain.engine.BlockingEngine
 import com.customblocker.domain.engine.LimitPeriod
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,6 +29,7 @@ import javax.inject.Singleton
 class UsageTracker @Inject constructor(
     private val engine: BlockingEngine,
     private val repository: BlockerRepository,
+    private val appSettings: AppSettingsStore,
 ) {
     private val usedSeconds = ConcurrentHashMap<Long, Int>()
     private val launches = ConcurrentHashMap<Long, Int>()
@@ -111,7 +114,8 @@ class UsageTracker @Inject constructor(
     }
 
     private fun periodIndex(period: LimitPeriod): Long = when (period) {
-        LimitPeriod.DAILY -> LocalDate.now().toEpochDay()
+        // The "day" rolls over at the user-configured start hour, not necessarily midnight.
+        LimitPeriod.DAILY -> LocalDateTime.now().minusHours(appSettings.dayStartHour.toLong()).toLocalDate().toEpochDay()
         LimitPeriod.HOURLY -> System.currentTimeMillis() / 3_600_000L
     }
 }

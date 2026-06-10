@@ -79,6 +79,7 @@ class BlockerRepository @Inject constructor(
                 blockUnsupportedBrowsers = p.blockUnsupportedBrowsers,
                 blockLaunch = p.blockLaunch,
                 blockNotifications = p.blockNotifications,
+                batchNotifications = p.batchNotifications,
                 pausedUntilMillis = p.pausedUntilMillis,
                 timeWindows = intervals.filter { it.profileId == p.id }
                     .map { TimeWindow(it.fromMinuteOfDay, it.toMinuteOfDay) },
@@ -97,8 +98,14 @@ class BlockerRepository @Inject constructor(
     /** All usage/launch limit rows across every profile (for the profile-list summaries). */
     fun observeAllUsageLimits(): Flow<List<UsageLimitEntity>> = dao.observeAllUsageLimits()
 
-    suspend fun createProfile(title: String): Long =
-        dao.insertProfile(ProfileEntity(title = title.ifBlank { "Profile" }, enabled = true, blockingMode = 0))
+    suspend fun createProfile(title: String, allowlist: Boolean = false): Long =
+        dao.insertProfile(
+            ProfileEntity(
+                title = title.ifBlank { "Profile" },
+                enabled = true,
+                blockingMode = if (allowlist) 1 else 0,
+            ),
+        )
 
     suspend fun deleteProfile(id: Long) = dao.deleteProfile(id)
 
@@ -190,6 +197,9 @@ class BlockerRepository @Inject constructor(
 
     suspend fun setBlockNotifications(profileId: Long, enabled: Boolean) =
         edit(profileId) { it.copy(blockNotifications = enabled) }
+
+    suspend fun setBatchNotifications(profileId: Long, batch: Boolean) =
+        edit(profileId) { it.copy(batchNotifications = batch) }
 
     suspend fun setAddNewApps(profileId: Long, enabled: Boolean) =
         edit(profileId) { it.copy(addNewApps = enabled) }
