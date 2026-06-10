@@ -28,7 +28,6 @@ data class BlockListUiState(
     /** Keyword rules (KEYWORD). */
     val keywords: List<WebsiteEntity> = emptyList(),
     val blockUnsupportedBrowsers: Boolean = false,
-    val blockLaunch: Boolean = true,
     val blockNotifications: Boolean = false,
     /** When blocking notifications: true = batch (hold & re-deliver), false = hide. */
     val batchNotifications: Boolean = false,
@@ -66,7 +65,6 @@ class BlockListViewModel @Inject constructor(
                 websites = sites.filter { it.matchType != keywordType },
                 keywords = sites.filter { it.matchType == keywordType },
                 blockUnsupportedBrowsers = profile?.blockUnsupportedBrowsers ?: false,
-                blockLaunch = profile?.blockLaunch ?: true,
                 blockNotifications = profile?.blockNotifications ?: false,
                 batchNotifications = profile?.batchNotifications ?: false,
             )
@@ -91,10 +89,6 @@ class BlockListViewModel @Inject constructor(
     }
 
     // Locked behaviour toggles: can turn ON (more restrictive), can't turn OFF.
-    fun setBlockLaunch(v: Boolean) = viewModelScope.launch {
-        if (locked && !v) return@launch
-        repository.setBlockLaunch(profileId, v)
-    }
     fun setBlockNotifications(v: Boolean) = viewModelScope.launch {
         if (locked && !v) return@launch
         repository.setBlockNotifications(profileId, v)

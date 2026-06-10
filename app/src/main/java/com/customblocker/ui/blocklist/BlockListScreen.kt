@@ -147,15 +147,6 @@ fun BlockListScreen(
             }
             item {
                 ToggleRow(
-                    title = "Block launching",
-                    subtitle = "Eject when a blocked app is opened.",
-                    checked = state.blockLaunch,
-                    enabled = !(editLocked && state.blockLaunch),
-                    onCheckedChange = viewModel::setBlockLaunch,
-                )
-            }
-            item {
-                ToggleRow(
                     title = "Block notifications",
                     subtitle = "Hold back notifications from blocked apps while this profile is restricting (needs notification access).",
                     checked = state.blockNotifications,

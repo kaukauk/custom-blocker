@@ -71,7 +71,8 @@ class BlockingEngine @Inject constructor() {
         if (isNeverBlocked(packageName)) return BlockDecision.Allow
 
         for (rule in profiles) {
-            if (!rule.blockLaunch) continue
+            // Launch-blocking (ejecting from a targeted app) is core behaviour — always applied for
+            // an active profile, not an opt-in.
             if (!ConditionEvaluator.isActive(rule, ctx)) continue
             if (rule.targets(packageName)) {
                 val how = if (rule.mode == BlockingMode.BLOCKLIST) "block list" else "allow list"
