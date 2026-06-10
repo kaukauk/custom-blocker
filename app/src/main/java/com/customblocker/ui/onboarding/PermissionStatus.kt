@@ -5,12 +5,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -93,14 +99,17 @@ fun ReliabilityBanner(modifier: Modifier = Modifier) {
     val batteryExempt by rememberBatteryExemptState()
     if (batteryExempt) return
     val context = LocalContext.current
-    val blue = Color(0xFF1565C0)
-    val onBlue = Color(0xFFE9F1FF)
+    val warn = Color(0xFFF9A825)
+    val onWarn = Color(0xFF231A00)
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = blue, contentColor = onBlue),
+        colors = CardDefaults.cardColors(containerColor = warn, contentColor = onWarn),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Don't let blocking get paused", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.WarningAmber, contentDescription = null)
+                Text("Don't let blocking get paused", style = MaterialTheme.typography.titleMedium)
+            }
             Text(
                 "To save power, Android can pause this app in the background — and when it does, a " +
                     "blocked app can slip through and your limits and schedules stop working. Allowing " +
@@ -110,7 +119,7 @@ fun ReliabilityBanner(modifier: Modifier = Modifier) {
             )
             Button(
                 onClick = { Permissions.requestIgnoreBatteryOptimizations(context) },
-                colors = ButtonDefaults.buttonColors(containerColor = onBlue, contentColor = blue),
+                colors = ButtonDefaults.buttonColors(containerColor = onWarn, contentColor = warn),
             ) { Text("Allow background activity") }
         }
     }
@@ -126,14 +135,17 @@ fun NotificationNudgeBanner(modifier: Modifier = Modifier) {
     val granted by rememberNotificationAccessState()
     if (granted) return
     val context = LocalContext.current
-    val orange = Color(0xFFFB8C00)
-    val onOrange = Color(0xFF2A1400)
+    val orange = Color(0xFFE64A19)
+    val onOrange = Color(0xFF2A0C00)
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = orange, contentColor = onOrange),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Notifications are still getting through", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Warning, contentDescription = null)
+                Text("Notifications are still getting through", style = MaterialTheme.typography.titleMedium)
+            }
             Text(
                 "While a profile is actively blocking an app, its notifications can still buzz and pull " +
                     "you back in. Turn on notification access and we'll hold those — only while it's being " +
@@ -165,11 +177,18 @@ fun PermissionBanner(
         ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                "Permissions needed",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Error,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                Text(
+                    "Permissions needed",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
             Text(
                 "Blocking can't run until these are granted.",
                 style = MaterialTheme.typography.bodySmall,
