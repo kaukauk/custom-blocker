@@ -53,7 +53,6 @@ fun AppNav() {
             BlockListScreen(
                 onAddApps = { navController.navigate(Routes.picker(id)) },
                 onOpenConditions = { navController.navigate(Routes.conditions(id)) },
-                onOpenWebsites = { navController.navigate(Routes.websites(id)) },
                 onBack = { navController.popBackStack() },
             )
         }

@@ -1,5 +1,7 @@
 package com.customblocker.ui.conditions
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -9,21 +11,27 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -41,7 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,10 +74,14 @@ fun ConditionsScreen(
     val locked by viewModel.editLocked.collectAsStateWithLifecycle()
     val mask = state.conditionsMask
 
-    // 0 = closed, 1 = picking start, 2 = picking end
+    // Accordion: at most one condition expanded at a time (its bit, or null).
+    var expanded by remember { mutableStateOf<Int?>(null) }
+    // Time-window picker: 0 = closed, 1 = picking start, 2 = picking end.
     var pickerStage by remember { mutableIntStateOf(0) }
     var pendingStart by remember { mutableIntStateOf(0) }
     var newSsid by remember { mutableStateOf("") }
+
+    fun toggleExpand(bit: Int) { expanded = if (expanded == bit) null else bit }
 
     Scaffold(
         topBar = {
@@ -90,8 +102,8 @@ fun ConditionsScreen(
         ) {
             item {
                 Text(
-                    "Blocking applies only when ALL enabled conditions are met. " +
-                        "Leave all off to block all the time.",
+                    "Blocking applies only when ALL switched-on conditions are met. Leave them all off " +
+                        "to block all the time. Tap a condition to see what it does.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -106,17 +118,17 @@ fun ConditionsScreen(
                 }
             }
 
-            // --- TIME ---
             item {
-                SectionHeader(
-                    title = "Time",
+                ConditionCard(
+                    icon = Icons.Default.Schedule,
+                    title = "Schedule",
+                    description = "Block only on chosen days and time windows.",
                     enabled = mask and ConditionTypes.TIME != 0,
                     onToggle = { viewModel.setConditionEnabled(ConditionTypes.TIME, it) },
                     toggleEnabled = !locked,
-                )
-            }
-            if (mask and ConditionTypes.TIME != 0) {
-                item {
+                    expanded = expanded == ConditionTypes.TIME,
+                    onExpand = { toggleExpand(ConditionTypes.TIME) },
+                ) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         DAYS.forEach { (label, bit) ->
                             FilterChip(
@@ -127,47 +139,45 @@ fun ConditionsScreen(
                             )
                         }
                     }
-                }
-                items(state.intervals, key = { "time-${it.id}" }) { interval ->
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("${hhmm(interval.fromMinuteOfDay)} – ${hhmm(interval.toMinuteOfDay)}")
-                        IconButton(onClick = { viewModel.removeInterval(interval.id) }, enabled = !locked) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove window")
+                    state.intervals.forEach { interval ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("${hhmm(interval.fromMinuteOfDay)} – ${hhmm(interval.toMinuteOfDay)}")
+                            IconButton(onClick = { viewModel.removeInterval(interval.id) }, enabled = !locked) {
+                                Icon(Icons.Default.Delete, contentDescription = "Remove window")
+                            }
                         }
                     }
-                }
-                item {
                     OutlinedButton(onClick = { pickerStage = 1 }, enabled = !locked) { Text("Add time window") }
                 }
             }
 
-            // --- WIFI ---
             item {
-                SectionHeader(
+                ConditionCard(
+                    icon = Icons.Default.Wifi,
                     title = "Wi-Fi network",
+                    description = "Block only while connected to specific Wi-Fi networks.",
                     enabled = mask and ConditionTypes.WIFI != 0,
                     onToggle = { viewModel.setConditionEnabled(ConditionTypes.WIFI, it) },
                     toggleEnabled = !locked,
-                )
-            }
-            if (mask and ConditionTypes.WIFI != 0) {
-                items(state.wifi, key = { "wifi-${it.id}" }) { net ->
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(net.ssid)
-                        IconButton(onClick = { viewModel.removeWifi(net.id) }, enabled = !locked) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove network")
+                    expanded = expanded == ConditionTypes.WIFI,
+                    onExpand = { toggleExpand(ConditionTypes.WIFI) },
+                ) {
+                    state.wifi.forEach { net ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(net.ssid)
+                            IconButton(onClick = { viewModel.removeWifi(net.id) }, enabled = !locked) {
+                                Icon(Icons.Default.Delete, contentDescription = "Remove network")
+                            }
                         }
                     }
-                }
-                item {
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -186,50 +196,50 @@ fun ConditionsScreen(
                 }
             }
 
-            // --- LOCATION ---
             item {
-                SectionHeader(
+                ConditionCard(
+                    icon = Icons.Default.Place,
                     title = "Location",
+                    description = "Block only at (or away from) chosen places.",
                     enabled = mask and ConditionTypes.LOCATION != 0,
                     onToggle = { viewModel.setConditionEnabled(ConditionTypes.LOCATION, it) },
                     toggleEnabled = !locked,
-                )
-            }
-            if (mask and ConditionTypes.LOCATION != 0) {
-                items(state.geofences, key = { "geo-${it.id}" }) { geo ->
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            "%.4f, %.4f · %dm%s".format(
-                                geo.latitude, geo.longitude, geo.radiusMeters.toInt(),
-                                if (geo.inverted) " (outside)" else "",
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        IconButton(onClick = { viewModel.removeGeo(geo.id) }, enabled = !locked) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove location")
+                    expanded = expanded == ConditionTypes.LOCATION,
+                    onExpand = { toggleExpand(ConditionTypes.LOCATION) },
+                ) {
+                    state.geofences.forEach { geo ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "%.4f, %.4f · %dm%s".format(
+                                    geo.latitude, geo.longitude, geo.radiusMeters.toInt(),
+                                    if (geo.inverted) " (outside)" else "",
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            IconButton(onClick = { viewModel.removeGeo(geo.id) }, enabled = !locked) {
+                                Icon(Icons.Default.Delete, contentDescription = "Remove location")
+                            }
                         }
                     }
-                }
-                item {
                     OutlinedButton(onClick = onAddLocation, enabled = !locked) { Text("Add location") }
                 }
             }
 
-            // --- USAGE LIMIT ---
             item {
-                SectionHeader(
+                ConditionCard(
+                    icon = Icons.Default.Timer,
                     title = "Usage time limit",
+                    description = "Allow a set amount of use per hour or day, then block until it resets.",
                     enabled = mask and ConditionTypes.USAGE_LIMIT != 0,
                     onToggle = { viewModel.toggleUsage(it) },
                     toggleEnabled = !locked,
-                )
-            }
-            if (mask and ConditionTypes.USAGE_LIMIT != 0) {
-                item {
+                    expanded = expanded == ConditionTypes.USAGE_LIMIT,
+                    onExpand = { toggleExpand(ConditionTypes.USAGE_LIMIT) },
+                ) {
                     LimitEditor(
                         value = state.usageMinutes ?: 15,
                         unitLabel = "minutes",
@@ -242,17 +252,17 @@ fun ConditionsScreen(
                 }
             }
 
-            // --- LAUNCH COUNT ---
             item {
-                SectionHeader(
-                    title = "Launch count limit",
+                ConditionCard(
+                    icon = Icons.Default.PhoneAndroid,
+                    title = "Launch limit",
+                    description = "Allow a set number of opens per hour or day, then block until it resets.",
                     enabled = mask and ConditionTypes.LAUNCH_COUNT != 0,
                     onToggle = { viewModel.toggleLaunch(it) },
                     toggleEnabled = !locked,
-                )
-            }
-            if (mask and ConditionTypes.LAUNCH_COUNT != 0) {
-                item {
+                    expanded = expanded == ConditionTypes.LAUNCH_COUNT,
+                    onExpand = { toggleExpand(ConditionTypes.LAUNCH_COUNT) },
+                ) {
                     LimitEditor(
                         value = state.launchCount ?: 5,
                         unitLabel = "launches",
@@ -264,13 +274,17 @@ fun ConditionsScreen(
                 }
             }
 
-            // --- CHARGER ---
             item {
-                SectionHeader(
-                    title = "Only when charging",
+                ConditionCard(
+                    icon = Icons.Default.BatteryChargingFull,
+                    title = "Charging",
+                    description = "Block only while the device is plugged in and charging.",
                     enabled = mask and ConditionTypes.CHARGER != 0,
                     onToggle = { viewModel.setConditionEnabled(ConditionTypes.CHARGER, it) },
                     toggleEnabled = !locked,
+                    expanded = expanded == ConditionTypes.CHARGER,
+                    onExpand = { toggleExpand(ConditionTypes.CHARGER) },
+                    editor = null,
                 )
             }
         }
@@ -299,6 +313,56 @@ fun ConditionsScreen(
     }
 }
 
+/**
+ * One condition as an expandable card: icon + name + on/off switch in the header (tap the header to
+ * expand). Expanding shows the description; when the condition is on, its [editor] is shown too.
+ */
+@Composable
+private fun ConditionCard(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    toggleEnabled: Boolean,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    editor: (@Composable () -> Unit)? = null,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clickable { onExpand() },
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Switch(checked = enabled, onCheckedChange = onToggle, enabled = toggleEnabled)
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (enabled && editor != null) editor()
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun LimitEditor(
     value: Int,
@@ -317,7 +381,6 @@ private fun LimitEditor(
             horizontalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             if (isTime && daily) {
-                // Per-day time limits can be long → separate hours + minutes wheels.
                 WheelColumn("hours", value / 60, 0..23, locked) { h -> commit(h * 60 + value % 60) }
                 WheelColumn("minutes", value % 60, 0..59, locked) { m -> commit((value / 60) * 60 + m) }
             } else if (isTime) {
@@ -338,22 +401,5 @@ private fun WheelColumn(label: String, value: Int, range: IntRange, locked: Bool
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         com.customblocker.ui.components.NumberWheel(value = value, range = range, onValue = onValue, enabled = !locked)
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun SectionHeader(
-    title: String,
-    enabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    toggleEnabled: Boolean = true,
-) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        Switch(checked = enabled, onCheckedChange = onToggle, enabled = toggleEnabled)
     }
 }

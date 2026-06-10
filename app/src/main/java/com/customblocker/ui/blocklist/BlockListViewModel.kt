@@ -3,8 +3,10 @@ package com.customblocker.ui.blocklist
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.customblocker.data.db.WebsiteEntity
 import com.customblocker.data.repo.BlockerRepository
 import com.customblocker.domain.engine.BlockingMode
+import com.customblocker.domain.engine.UrlMatchType
 import com.customblocker.domain.strict.ProfileLockState
 import com.customblocker.ui.AppLister
 import com.customblocker.ui.InstalledApp
@@ -21,6 +23,11 @@ data class BlockListUiState(
     val enabled: Boolean = false,
     val mode: BlockingMode = BlockingMode.BLOCKLIST,
     val apps: List<InstalledApp> = emptyList(),
+    /** Web address rules (DOMAIN/EXACT). */
+    val websites: List<WebsiteEntity> = emptyList(),
+    /** Keyword rules (KEYWORD). */
+    val keywords: List<WebsiteEntity> = emptyList(),
+    val blockUnsupportedBrowsers: Boolean = false,
     val blockLaunch: Boolean = true,
     val blockNotifications: Boolean = false,
     /** When blocking notifications: true = batch (hold & re-deliver), false = hide. */
@@ -45,12 +52,20 @@ class BlockListViewModel @Inject constructor(
     private val isAllowlist get() = state.value.mode == BlockingMode.ALLOWLIST
 
     val state: StateFlow<BlockListUiState> =
-        combine(repository.observeProfile(profileId), repository.observeApps(profileId)) { profile, apps ->
+        combine(
+            repository.observeProfile(profileId),
+            repository.observeApps(profileId),
+            repository.observeWebsites(profileId),
+        ) { profile, apps, sites ->
+            val keywordType = UrlMatchType.KEYWORD.ordinal
             BlockListUiState(
                 title = profile?.title ?: "",
                 enabled = profile?.enabled ?: false,
                 mode = if (profile?.blockingMode == 1) BlockingMode.ALLOWLIST else BlockingMode.BLOCKLIST,
                 apps = apps.map { InstalledApp(it.packageName, lister.label(it.packageName)) },
+                websites = sites.filter { it.matchType != keywordType },
+                keywords = sites.filter { it.matchType == keywordType },
+                blockUnsupportedBrowsers = profile?.blockUnsupportedBrowsers ?: false,
                 blockLaunch = profile?.blockLaunch ?: true,
                 blockNotifications = profile?.blockNotifications ?: false,
                 batchNotifications = profile?.batchNotifications ?: false,
@@ -84,9 +99,22 @@ class BlockListViewModel @Inject constructor(
         if (locked && !v) return@launch
         repository.setBlockNotifications(profileId, v)
     }
-    // Batch (hold & re-deliver) is less restrictive than hide, so locked profiles can't switch it on.
+    // Hide vs batch is just a delivery preference (not a restrictiveness change), so it's always editable.
     fun setBatchNotifications(v: Boolean) = viewModelScope.launch {
-        if (locked && v) return@launch
         repository.setBatchNotifications(profileId, v)
+    }
+
+    // Adding a site/keyword raises restrictiveness → always allowed; removing lowers it → blocked when locked.
+    fun addWebsite(value: String, matchType: UrlMatchType) = viewModelScope.launch {
+        if (value.isBlank()) return@launch
+        repository.addWebsite(profileId, value.trim(), matchType)
+    }
+    fun removeWebsite(id: Long) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.removeWebsite(id)
+    }
+    fun setBlockUnsupportedBrowsers(v: Boolean) = viewModelScope.launch {
+        if (locked && !v) return@launch
+        repository.setBlockUnsupportedBrowsers(profileId, v)
     }
 }
