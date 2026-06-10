@@ -6,6 +6,8 @@ import com.customblocker.domain.engine.LimitPeriod
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
@@ -33,6 +35,12 @@ class UsageTracker @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** Live per-profile counters (usedSeconds, launches) for the UI to display progress toward limits. */
+    private val _live = MutableStateFlow(emptyMap<Long, Int>() to emptyMap<Long, Int>())
+    val live: StateFlow<Pair<Map<Long, Int>, Map<Long, Int>>> = _live
+
+    private fun publish() { _live.value = usedSeconds.toMap() to launches.toMap() }
+
     /** Restore persisted counters on startup; drop any whose period has already rolled over. */
     fun load() = scope.launch {
         repository.loadUsageCounters().forEach { c ->
@@ -41,6 +49,7 @@ class UsageTracker @Inject constructor(
             usagePeriod[c.profileId] = c.usagePeriodKey
             launchPeriod[c.profileId] = c.launchPeriodKey
         }
+        publish()
     }
 
     /** Add [seconds] of foreground use of [pkg] to every matching usage-limited profile. */
@@ -48,22 +57,26 @@ class UsageTracker @Inject constructor(
         if (seconds <= 0) return
         engine.profiles.forEach { rule ->
             val spec = rule.usageLimit ?: return@forEach
-            if (pkg !in rule.apps) return@forEach
+            // Count the apps this profile actually targets — for an allow list that's the apps NOT
+            // in the list, so `pkg in apps` would wrongly accumulate nothing and never block.
+            if (!rule.targets(pkg)) return@forEach
             resetIfNeeded(rule.id, usagePeriod, usedSeconds, periodIndex(spec.period))
             usedSeconds.merge(rule.id, seconds, Int::plus)
             persist(rule.id)
         }
+        publish()
     }
 
     /** Count a launch of [pkg] against every matching launch-limited profile. */
     fun onLaunch(pkg: String) {
         engine.profiles.forEach { rule ->
             val spec = rule.launchLimit ?: return@forEach
-            if (pkg !in rule.apps) return@forEach
+            if (!rule.targets(pkg)) return@forEach
             resetIfNeeded(rule.id, launchPeriod, launches, periodIndex(spec.period))
             launches.merge(rule.id, 1, Int::plus)
             persist(rule.id)
         }
+        publish()
     }
 
     /** Current (usedSeconds, launchCounts) maps for the engine context, with stale periods reset. */
@@ -72,6 +85,7 @@ class UsageTracker @Inject constructor(
             rule.usageLimit?.let { resetIfNeeded(rule.id, usagePeriod, usedSeconds, periodIndex(it.period)) }
             rule.launchLimit?.let { resetIfNeeded(rule.id, launchPeriod, launches, periodIndex(it.period)) }
         }
+        publish()
         return usedSeconds.toMap() to launches.toMap()
     }
 

@@ -239,6 +239,13 @@ fun ConditionsScreen(
                         locked = locked,
                     )
                 }
+                item {
+                    UsageProgress(
+                        used = formatUsed(state.usageUsedSeconds),
+                        limit = "${state.usageMinutes ?: 15}m",
+                        daily = state.usageDaily,
+                    )
+                }
             }
 
             // --- LAUNCH COUNT ---
@@ -259,6 +266,13 @@ fun ConditionsScreen(
                         onValue = { viewModel.setLaunchLimit(it, state.launchDaily) },
                         onPeriod = { viewModel.setLaunchLimit(state.launchCount ?: 5, it) },
                         locked = locked,
+                    )
+                }
+                item {
+                    UsageProgress(
+                        used = "${state.launchesUsed}",
+                        limit = "${state.launchCount ?: 5}",
+                        daily = state.launchDaily,
                     )
                 }
             }
@@ -296,6 +310,22 @@ fun ConditionsScreen(
             dismissButton = { TextButton(onClick = { pickerStage = 0 }) { Text("Cancel") } },
         )
     }
+}
+
+/** Live progress toward a limit this period, e.g. "1m 30s used of 5m this hour". */
+@Composable
+private fun UsageProgress(used: String, limit: String, daily: Boolean) {
+    Text(
+        "$used used of $limit ${if (daily) "today" else "this hour"}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+private fun formatUsed(seconds: Int): String {
+    val m = seconds / 60
+    val s = seconds % 60
+    return if (m > 0) "${m}m ${s}s" else "${s}s"
 }
 
 @Composable
