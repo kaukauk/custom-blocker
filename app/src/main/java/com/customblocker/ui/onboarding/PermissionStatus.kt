@@ -118,11 +118,11 @@ fun NotificationNudgeBanner(modifier: Modifier = Modifier) {
     val granted by rememberNotificationAccessState()
     if (granted) return
     val context = LocalContext.current
-    val amber = Color(0xFFFFB300)
-    val onAmber = Color(0xFF241A00)
+    val orange = Color(0xFFFB8C00)
+    val onOrange = Color(0xFF2A1400)
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = amber, contentColor = onAmber),
+        colors = CardDefaults.cardColors(containerColor = orange, contentColor = onOrange),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Notifications are still getting through", style = MaterialTheme.typography.titleMedium)
@@ -134,7 +134,7 @@ fun NotificationNudgeBanner(modifier: Modifier = Modifier) {
             )
             Button(
                 onClick = { Permissions.openNotificationAccessSettings(context) },
-                colors = ButtonDefaults.buttonColors(containerColor = onAmber, contentColor = amber),
+                colors = ButtonDefaults.buttonColors(containerColor = onOrange, contentColor = orange),
             ) { Text("Turn on notification access") }
         }
     }
