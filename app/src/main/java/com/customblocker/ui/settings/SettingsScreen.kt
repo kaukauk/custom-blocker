@@ -1,5 +1,6 @@
 package com.customblocker.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -110,64 +110,52 @@ fun SettingsScreen(
             val (accessibilityOn, overlayOn) = rememberPermissionState().value
             val notificationOn by rememberNotificationAccessState()
             val batteryExempt by rememberBatteryExemptState()
+            val deviceAdminActive by rememberDeviceAdminActive()
             Section("Permissions") {
                 Text(
-                    "A green check means it's granted and working.",
+                    "Tap any permission to change it in system settings.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 PermissionRow(
                     label = "Accessibility",
-                    description = "Detects and blocks apps. Required.",
                     granted = accessibilityOn,
-                    onFix = { Permissions.openAccessibilitySettings(context) },
+                    onClick = { Permissions.openAccessibilitySettings(context) },
                 )
                 PermissionRow(
                     label = "Display over other apps",
-                    description = "Shows the block screen. Required.",
                     granted = overlayOn,
-                    onFix = { Permissions.openOverlaySettings(context) },
+                    onClick = { Permissions.openOverlaySettings(context) },
                 )
                 PermissionRow(
                     label = "Notification access",
-                    description = "Hides or batches blocked notifications.",
                     granted = notificationOn,
-                    onFix = { Permissions.openNotificationAccessSettings(context) },
+                    onClick = { Permissions.openNotificationAccessSettings(context) },
                 )
                 PermissionRow(
                     label = "Run without battery limits",
-                    description = "Keeps blocking alive in the background.",
                     granted = batteryExempt,
-                    onFix = { Permissions.requestIgnoreBatteryOptimizations(context) },
-                )
-            }
-
-            HorizontalDivider()
-
-            // --- Strict Mode permissions (separate: only needed for uninstall protection) ---
-            val deviceAdminActive by rememberDeviceAdminActive()
-            Section("Strict Mode") {
-                Text(
-                    "Needed only for uninstall protection (Strict Mode level 2 and up).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    onClick = { Permissions.openBatteryOptimizationSettings(context) },
                 )
                 PermissionRow(
                     label = "Device admin",
-                    description = "Lets Strict Mode stop the app being uninstalled.",
+                    subtitle = "Uninstall protection · Strict Mode level 2 and up",
                     granted = deviceAdminActive,
-                    onFix = { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) },
+                    onClick = { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) },
                 )
             }
         }
     }
 }
 
-/** One permission with a green check when granted, or a "Grant" action when missing. */
+/**
+ * One permission, always tappable (so the user can turn it on OR off in system settings). Green
+ * check when granted, red outline when not. [subtitle] is optional extra context.
+ */
 @Composable
-private fun PermissionRow(label: String, description: String, granted: Boolean, onFix: () -> Unit) {
+private fun PermissionRow(label: String, granted: Boolean, onClick: () -> Unit, subtitle: String? = null) {
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().clickable { onClick() },
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -178,14 +166,13 @@ private fun PermissionRow(label: String, description: String, granted: Boolean, 
         )
         Column(Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                if (granted) "Working" else description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (!granted) {
-            TextButton(onClick = onFix) { Text("Grant") }
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

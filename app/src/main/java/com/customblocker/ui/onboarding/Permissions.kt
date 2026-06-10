@@ -68,4 +68,12 @@ object Permissions {
             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }
+
+    /** The system battery-optimization list, where the exemption can be turned on or off. */
+    fun openBatteryOptimizationSettings(context: Context) {
+        context.startActivity(
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
 }
