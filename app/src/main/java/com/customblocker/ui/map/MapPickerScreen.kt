@@ -14,11 +14,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -172,7 +169,7 @@ fun MapPickerScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Box(Modifier.fillMaxWidth().height(340.dp)) {
+            Box(Modifier.weight(1f).fillMaxWidth()) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = {
@@ -222,9 +219,7 @@ fun MapPickerScreen(
 
             Column(
                 Modifier.fillMaxWidth()
-                    .weight(1f)
                     .background(MaterialTheme.colorScheme.surface)
-                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
