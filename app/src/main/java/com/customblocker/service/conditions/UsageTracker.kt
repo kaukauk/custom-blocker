@@ -2,7 +2,9 @@ package com.customblocker.service.conditions
 
 import com.customblocker.data.prefs.AppSettingsStore
 import com.customblocker.data.repo.BlockerRepository
+import com.customblocker.domain.engine.BlockContext
 import com.customblocker.domain.engine.BlockingEngine
+import com.customblocker.domain.engine.ConditionEvaluator
 import com.customblocker.domain.engine.LimitPeriod
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,14 +57,20 @@ class UsageTracker @Inject constructor(
         publish()
     }
 
-    /** Add [seconds] of foreground use of [pkg] to every matching usage-limited profile. */
-    fun addUsage(pkg: String, seconds: Int) {
+    /**
+     * Add [seconds] of foreground use of [pkg] to every matching usage-limited profile — but only
+     * while that profile is actually applicable ([ConditionEvaluator.isApplicable]): enabled, not
+     * paused, and within its schedule/Wi-Fi/location/charging conditions. Outside that, watching
+     * shouldn't burn the allowance, so we don't count it.
+     */
+    fun addUsage(pkg: String, seconds: Int, ctx: BlockContext) {
         if (seconds <= 0) return
         engine.profiles.forEach { rule ->
             val spec = rule.usageLimit ?: return@forEach
             // Count the apps this profile actually targets — for an allow list that's the apps NOT
             // in the list, so `pkg in apps` would wrongly accumulate nothing and never block.
             if (!rule.targets(pkg)) return@forEach
+            if (!ConditionEvaluator.isApplicable(rule, ctx)) return@forEach
             resetIfNeeded(rule.id, usagePeriod, usedSeconds, periodIndex(spec.period))
             usedSeconds.merge(rule.id, seconds, Int::plus)
             persist(rule.id)
@@ -70,11 +78,12 @@ class UsageTracker @Inject constructor(
         publish()
     }
 
-    /** Count a launch of [pkg] against every matching launch-limited profile. */
-    fun onLaunch(pkg: String) {
+    /** Count a launch of [pkg] against every matching launch-limited profile that's applicable now. */
+    fun onLaunch(pkg: String, ctx: BlockContext) {
         engine.profiles.forEach { rule ->
             val spec = rule.launchLimit ?: return@forEach
             if (!rule.targets(pkg)) return@forEach
+            if (!ConditionEvaluator.isApplicable(rule, ctx)) return@forEach
             resetIfNeeded(rule.id, launchPeriod, launches, periodIndex(spec.period))
             launches.merge(rule.id, 1, Int::plus)
             persist(rule.id)

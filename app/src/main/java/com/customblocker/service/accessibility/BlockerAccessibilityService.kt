@@ -164,7 +164,7 @@ class BlockerAccessibilityService : AccessibilityService() {
                     accrueUsage()                 // finalize the previous app's foreground time
                     trackedPkg = pkg
                     sinceMs = SystemClock.elapsedRealtime()
-                    usageTracker.onLaunch(pkg)    // count a launch for launch-limited profiles
+                    usageTracker.onLaunch(pkg, contextProvider.current())  // count a launch for launch-limited profiles
 
                     L.d(L.FG, "foreground=$pkg cls=${event.className}")
                     if (evaluate(pkg)) return     // app blocked — no point reading its URL
@@ -202,7 +202,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         val seconds = ((now - sinceMs) / 1000L).toInt()
         if (seconds > 0) {
-            usageTracker.addUsage(pkg, seconds)
+            usageTracker.addUsage(pkg, seconds, contextProvider.current())
             statsRecorder.recordUsage(pkg, seconds)
             sinceMs = now
         }

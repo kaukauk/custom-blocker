@@ -119,27 +119,31 @@ fun SettingsScreen(
                 )
                 PermissionRow(
                     label = "Accessibility",
+                    subtitle = "Detects which app is in the foreground so it can be blocked.",
                     granted = accessibilityOn,
                     onClick = { Permissions.openAccessibilitySettings(context) },
                 )
                 PermissionRow(
                     label = "Display over other apps",
+                    subtitle = "Shows the block screen on top of a blocked app.",
                     granted = overlayOn,
                     onClick = { Permissions.openOverlaySettings(context) },
                 )
                 PermissionRow(
                     label = "Notification access",
+                    subtitle = "Hides or batches notifications from blocked apps.",
                     granted = notificationOn,
                     onClick = { Permissions.openNotificationAccessSettings(context) },
                 )
                 PermissionRow(
                     label = "Run without battery limits",
+                    subtitle = "Stops Android pausing blocking in the background.",
                     granted = batteryExempt,
                     onClick = { Permissions.openBatteryOptimizationSettings(context) },
                 )
                 PermissionRow(
                     label = "Device admin",
-                    subtitle = "Uninstall protection · Strict Mode level 2 and up",
+                    subtitle = "Uninstall protection · Strict Mode level 2 and up.",
                     granted = deviceAdminActive,
                     onClick = { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) },
                 )

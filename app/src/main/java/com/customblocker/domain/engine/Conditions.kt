@@ -106,6 +106,26 @@ object ConditionEvaluator {
 
     /** True if every enabled condition of [rule] is satisfied by [ctx]. */
     fun isActive(rule: ProfileRule, ctx: BlockContext): Boolean {
+        if (!isApplicable(rule, ctx)) return false
+        val m = rule.conditionsMask
+        if (m and ConditionTypes.USAGE_LIMIT != 0) {
+            val spec = rule.usageLimit ?: return false
+            if ((ctx.usageUsedSeconds[rule.id] ?: 0) < spec.limitSeconds) return false
+        }
+        if (m and ConditionTypes.LAUNCH_COUNT != 0) {
+            val spec = rule.launchLimit ?: return false
+            if ((ctx.launchCounts[rule.id] ?: 0) < spec.limit) return false
+        }
+        return true
+    }
+
+    /**
+     * True if [rule] is enabled, not paused, and all of its NON-limit conditions (schedule, Wi-Fi,
+     * location, charging) are met right now — i.e. the profile is "in effect", ignoring the
+     * usage/launch gates. Usage time and launch counts only accrue while this holds, so they don't
+     * burn the allowance while the profile doesn't even apply (disabled, paused, or out of schedule).
+     */
+    fun isApplicable(rule: ProfileRule, ctx: BlockContext): Boolean {
         if (!rule.enabled) return false
         if (rule.pausedUntilMillis > ctx.nowMillis) return false   // temporarily paused
         val m = rule.conditionsMask
@@ -128,14 +148,6 @@ object ConditionEvaluator {
                 if (fence.inverted) !inside else inside
             }
             if (!satisfied) return false
-        }
-        if (m and ConditionTypes.USAGE_LIMIT != 0) {
-            val spec = rule.usageLimit ?: return false
-            if ((ctx.usageUsedSeconds[rule.id] ?: 0) < spec.limitSeconds) return false
-        }
-        if (m and ConditionTypes.LAUNCH_COUNT != 0) {
-            val spec = rule.launchLimit ?: return false
-            if ((ctx.launchCounts[rule.id] ?: 0) < spec.limit) return false
         }
         return true
     }
