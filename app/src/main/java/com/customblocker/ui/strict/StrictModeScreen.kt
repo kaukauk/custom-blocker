@@ -136,17 +136,23 @@ fun StrictModeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val needsPin = config.gate == UnlockGate.PIN && !config.hasPin
                     Column(Modifier.weight(1f)) {
                         Text("Strict Mode", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Makes blocking harder to bypass. Choose how strict and how to unlock.",
+                            if (needsPin && !config.enabled)
+                                "Set a PIN below before you can turn on the PIN gate."
+                            else
+                                "Makes blocking harder to bypass. Choose how strict and how to unlock.",
                             style = MaterialTheme.typography.bodySmall,
+                            color = if (needsPin && !config.enabled) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Switch(
                         checked = config.enabled,
                         onCheckedChange = viewModel::setEnabled,
-                        enabled = !locked,
+                        enabled = !locked && !(needsPin && !config.enabled),
                     )
                 }
             }

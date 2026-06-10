@@ -21,6 +21,8 @@ class StrictModeViewModel @Inject constructor(
         store.config.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StrictModeConfig())
 
     fun setEnabled(enabled: Boolean) = viewModelScope.launch {
+        // The PIN gate is meaningless without a PIN — don't let Strict Mode turn on until one is set.
+        if (enabled && config.value.gate == UnlockGate.PIN && !config.value.hasPin) return@launch
         // Enabling with the TIMER gate starts a fixed-deadline commitment (can't be turned off early).
         if (enabled && config.value.gate == UnlockGate.TIMER) {
             store.startTimedLock(config.value.timerMinutes, System.currentTimeMillis())

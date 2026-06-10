@@ -35,10 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.customblocker.data.prefs.ThemeMode
+import com.customblocker.service.admin.BlockerDeviceAdminReceiver
 import com.customblocker.ui.onboarding.Permissions
 import com.customblocker.ui.onboarding.rememberBatteryExemptState
 import com.customblocker.ui.onboarding.rememberNotificationAccessState
 import com.customblocker.ui.onboarding.rememberPermissionState
+import com.customblocker.ui.strict.rememberDeviceAdminActive
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,6 +139,24 @@ fun SettingsScreen(
                     description = "Keeps blocking alive in the background.",
                     granted = batteryExempt,
                     onFix = { Permissions.requestIgnoreBatteryOptimizations(context) },
+                )
+            }
+
+            HorizontalDivider()
+
+            // --- Strict Mode permissions (separate: only needed for uninstall protection) ---
+            val deviceAdminActive by rememberDeviceAdminActive()
+            Section("Strict Mode") {
+                Text(
+                    "Needed only for uninstall protection (Strict Mode level 2 and up).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                PermissionRow(
+                    label = "Device admin",
+                    description = "Lets Strict Mode stop the app being uninstalled.",
+                    granted = deviceAdminActive,
+                    onFix = { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) },
                 )
             }
         }
