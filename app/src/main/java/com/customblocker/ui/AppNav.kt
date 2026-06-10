@@ -20,7 +20,7 @@ object Routes {
     const val PROFILES = "profiles"
     const val PROFILE = "profile/{profileId}"
     const val PICKER = "picker/{profileId}"
-    const val CONDITIONS = "conditions/{profileId}"
+    const val CONDITIONS = "conditions/{profileId}?expand={expand}"
     const val MAP = "map/{profileId}"
     const val WEBSITES = "websites/{profileId}"
     const val STRICT = "strict"
@@ -29,7 +29,8 @@ object Routes {
 
     fun profile(id: Long) = "profile/$id"
     fun picker(id: Long) = "picker/$id"
-    fun conditions(id: Long) = "conditions/$id"
+    fun conditions(id: Long, expand: Int? = null) =
+        "conditions/$id" + (expand?.let { "?expand=$it" } ?: "")
     fun map(id: Long) = "map/$id"
     fun websites(id: Long) = "websites/$id"
 }
@@ -52,18 +53,26 @@ fun AppNav() {
             val id = entry.arguments?.getLong("profileId") ?: 0L
             BlockListScreen(
                 onAddApps = { navController.navigate(Routes.picker(id)) },
-                onOpenConditions = { navController.navigate(Routes.conditions(id)) },
+                onOpenConditions = { expand -> navController.navigate(Routes.conditions(id, expand)) },
                 onBack = { navController.popBackStack() },
             )
         }
         composable(Routes.PICKER, arguments = profileIdArg) {
             AppPickerScreen(onBack = { navController.popBackStack() })
         }
-        composable(Routes.CONDITIONS, arguments = profileIdArg) { entry ->
+        composable(
+            Routes.CONDITIONS,
+            arguments = listOf(
+                navArgument("profileId") { type = NavType.LongType },
+                navArgument("expand") { type = NavType.IntType; defaultValue = 0 },
+            ),
+        ) { entry ->
             val id = entry.arguments?.getLong("profileId") ?: 0L
+            val expand = entry.arguments?.getInt("expand") ?: 0
             ConditionsScreen(
                 onBack = { navController.popBackStack() },
                 onAddLocation = { navController.navigate(Routes.map(id)) },
+                initialExpanded = expand.takeIf { it != 0 },
             )
         }
         composable(Routes.MAP, arguments = profileIdArg) {

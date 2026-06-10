@@ -68,14 +68,16 @@ private fun hhmm(minuteOfDay: Int): String = "%02d:%02d".format(minuteOfDay / 60
 fun ConditionsScreen(
     onBack: () -> Unit,
     onAddLocation: () -> Unit,
+    initialExpanded: Int? = null,
     viewModel: ConditionsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val locked by viewModel.editLocked.collectAsStateWithLifecycle()
     val mask = state.conditionsMask
 
-    // Accordion: at most one condition expanded at a time (its bit, or null).
-    var expanded by remember { mutableStateOf<Int?>(null) }
+    // Accordion: at most one condition expanded at a time (its bit, or null). Pre-expands the
+    // condition the user tapped on the profile screen.
+    var expanded by remember { mutableStateOf(initialExpanded) }
     // Time-window picker: 0 = closed, 1 = picking start, 2 = picking end.
     var pickerStage by remember { mutableIntStateOf(0) }
     var pendingStart by remember { mutableIntStateOf(0) }

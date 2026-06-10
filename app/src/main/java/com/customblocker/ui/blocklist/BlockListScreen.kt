@@ -1,5 +1,6 @@
 package com.customblocker.ui.blocklist
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -68,7 +70,7 @@ import com.customblocker.ui.strict.UnlockDialog
 @Composable
 fun BlockListScreen(
     onAddApps: () -> Unit,
-    onOpenConditions: () -> Unit,
+    onOpenConditions: (Int?) -> Unit,
     onBack: () -> Unit,
     viewModel: BlockListViewModel = hiltViewModel(),
     lockViewModel: LockViewModel = hiltViewModel(),
@@ -86,6 +88,7 @@ fun BlockListScreen(
     val notificationAccess by com.customblocker.ui.onboarding.rememberNotificationAccessState()
 
     var blockedTab by remember { mutableIntStateOf(0) } // 0 = Apps, 1 = Websites, 2 = Keywords
+    var showRename by remember { mutableStateOf(false) }
 
     if (showUnlock) {
         UnlockDialog(
@@ -99,7 +102,12 @@ fun BlockListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(state.title.ifBlank { "Profile" }) },
+                title = {
+                    Text(
+                        state.title.ifBlank { "Profile" },
+                        modifier = Modifier.clickable { showRename = true },
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -155,7 +163,11 @@ fun BlockListScreen(
                         } else {
                             state.conditions.forEach { cond ->
                                 Row(
-                                    Modifier.fillMaxWidth(),
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(MaterialTheme.shapes.small)
+                                        .clickable { onOpenConditions(cond.bit) }
+                                        .padding(vertical = 4.dp),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
@@ -167,7 +179,7 @@ fun BlockListScreen(
                                 }
                             }
                         }
-                        FilledTonalButton(onClick = onOpenConditions, modifier = Modifier.fillMaxWidth()) {
+                        FilledTonalButton(onClick = { onOpenConditions(null) }, modifier = Modifier.fillMaxWidth()) {
                             Text("Edit conditions")
                         }
                     }
@@ -175,7 +187,7 @@ fun BlockListScreen(
             }
 
             item {
-                Text("Behavior", style = MaterialTheme.typography.titleSmall)
+                Text("Notifications", style = MaterialTheme.typography.titleSmall)
                 HorizontalDivider(Modifier.padding(top = 4.dp))
             }
             item {
@@ -276,6 +288,29 @@ fun BlockListScreen(
                 else -> keywordsTab(state, editLocked, viewModel)
             }
         }
+    }
+
+    if (showRename) {
+        var name by remember { mutableStateOf(state.title) }
+        AlertDialog(
+            onDismissRequest = { showRename = false },
+            title = { Text("Rename profile") },
+            text = {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.renameProfile(name)
+                    showRename = false
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showRename = false }) { Text("Cancel") } },
+        )
     }
 }
 

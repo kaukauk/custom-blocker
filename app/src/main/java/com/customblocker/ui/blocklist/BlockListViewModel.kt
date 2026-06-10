@@ -131,6 +131,11 @@ class BlockListViewModel @Inject constructor(
 
     private fun hhmm(minuteOfDay: Int): String = "%02d:%02d".format(minuteOfDay / 60, minuteOfDay % 60)
 
+    // Renaming is cosmetic (no restrictiveness change) → always allowed.
+    fun renameProfile(title: String) = viewModelScope.launch {
+        if (title.isNotBlank()) repository.renameProfile(profileId, title.trim())
+    }
+
     // Locked: can enable a profile (more blocking) but not disable it.
     fun setEnabled(enabled: Boolean) = viewModelScope.launch {
         if (locked && !enabled) return@launch
