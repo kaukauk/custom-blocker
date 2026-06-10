@@ -95,13 +95,14 @@ object Permissions {
     }
 
     fun openOverlaySettings(context: Context) {
-        // The package: URI is meant to land on our own per-app toggle, but some builds ignore it and
-        // drop the user on the general list — so also pass the highlight extras to scroll to our row.
+        // The package: URI is the canonical way to land on OUR per-app overlay toggle. We use plain
+        // NEW_TASK (not CLEAR_TASK) and no highlight extras: both can override the package routing on
+        // some builds and bounce the user to the general list instead.
         context.startActivity(
             Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:${context.packageName}"),
-            ).addFlags(FRESH_TASK).highlight(context.packageName),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }
 
