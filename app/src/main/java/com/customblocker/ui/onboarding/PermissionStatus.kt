@@ -85,25 +85,33 @@ fun rememberBatteryExemptState(): State<Boolean> {
 }
 
 /**
- * A soft reliability nudge (not a hard requirement): exempting the app from battery optimization
- * keeps geofences, counters, and the detector alive under Doze. Hidden once granted.
+ * A strongly-suggested reliability prompt: without a battery-optimization exemption, Android can
+ * pause the app in the background, so blocking quietly stops working. Hidden once granted.
  */
 @Composable
 fun ReliabilityBanner(modifier: Modifier = Modifier) {
     val batteryExempt by rememberBatteryExemptState()
     if (batteryExempt) return
     val context = LocalContext.current
-    Card(modifier = modifier.fillMaxWidth()) {
+    val blue = Color(0xFF1565C0)
+    val onBlue = Color(0xFFE9F1FF)
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = blue, contentColor = onBlue),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Improve reliability", style = MaterialTheme.typography.titleMedium)
+            Text("Don't let blocking get paused", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Allow the app to run without battery restrictions so blocking keeps working in the " +
-                    "background (location, limits, and detection won't be paused by Doze).",
+                "To save power, Android can pause this app in the background — and when it does, a " +
+                    "blocked app can slip through and your limits and schedules stop working. Allowing " +
+                    "background activity keeps blocking reliable. It barely touches your battery: the app " +
+                    "only checks which app is open, it does no heavy work.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            Button(onClick = { Permissions.requestIgnoreBatteryOptimizations(context) }) {
-                Text("Allow background activity")
-            }
+            Button(
+                onClick = { Permissions.requestIgnoreBatteryOptimizations(context) },
+                colors = ButtonDefaults.buttonColors(containerColor = onBlue, contentColor = blue),
+            ) { Text("Allow background activity") }
         }
     }
 }
@@ -129,8 +137,8 @@ fun NotificationNudgeBanner(modifier: Modifier = Modifier) {
             Text(
                 "While a profile is actively blocking an app, its notifications can still buzz and pull " +
                     "you back in. Turn on notification access and we'll hold those — only while it's being " +
-                    "blocked — then deliver them when the block lifts (like the top of the hour). Any other " +
-                    "time, notifications come through as normal. So you're not constantly pinged, but never miss a thing.",
+                    "blocked — then deliver them once the block lifts. Any other time, notifications come " +
+                    "through as normal. So you're not constantly pinged, but never miss a thing.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Button(
