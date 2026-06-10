@@ -153,7 +153,7 @@ fun BlockListScreen(
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Text("When this profile blocks", style = MaterialTheme.typography.titleMedium)
+                            Text("Conditions", style = MaterialTheme.typography.titleMedium)
                         }
                         if (state.conditions.isEmpty()) {
                             Text(
@@ -216,7 +216,7 @@ fun BlockListScreen(
                         }
                         Text(
                             if (state.batchNotifications)
-                                "Notifications are held and delivered when time resets (e.g. the top of the hour)."
+                                "Held while this profile is blocking these apps, and delivered once they're usable again."
                             else "Notifications are dismissed and never shown.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
