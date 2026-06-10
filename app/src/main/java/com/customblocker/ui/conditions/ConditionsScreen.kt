@@ -42,16 +42,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.customblocker.data.db.GeoAddressEntity
 import com.customblocker.domain.engine.ConditionTypes
 import com.customblocker.domain.engine.DayFlags
+import com.customblocker.ui.map.Geocoding
 
 private val DAYS = listOf(
     "Mon" to DayFlags.MON, "Tue" to DayFlags.TUE, "Wed" to DayFlags.WED,
@@ -64,7 +68,7 @@ private fun hhmm(minuteOfDay: Int): String = "%02d:%02d".format(minuteOfDay / 60
 @Composable
 fun ConditionsScreen(
     onBack: () -> Unit,
-    onAddLocation: () -> Unit,
+    onOpenMap: (Long?) -> Unit,
     initialExpanded: Int? = null,
     viewModel: ConditionsViewModel = hiltViewModel(),
 ) {
@@ -165,24 +169,14 @@ fun ConditionsScreen(
                     onExpand = { toggleExpand(ConditionTypes.LOCATION) },
                 ) {
                     state.geofences.forEach { geo ->
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "%.4f, %.4f · %dm%s".format(
-                                    geo.latitude, geo.longitude, geo.radiusMeters.toInt(),
-                                    if (geo.inverted) " (outside)" else "",
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            IconButton(onClick = { viewModel.removeGeo(geo.id) }, enabled = !locked) {
-                                Icon(Icons.Default.Delete, contentDescription = "Remove location")
-                            }
-                        }
+                        GeofenceRow(
+                            geo = geo,
+                            locked = locked,
+                            onEdit = { onOpenMap(geo.id) },
+                            onRemove = { viewModel.removeGeo(geo.id) },
+                        )
                     }
-                    OutlinedButton(onClick = onAddLocation, enabled = !locked) { Text("Add location") }
+                    OutlinedButton(onClick = { onOpenMap(null) }, enabled = !locked) { Text("Add location") }
                 }
             }
 
@@ -239,10 +233,10 @@ fun ConditionsScreen(
                         // Off: explain it can go either way so the user knows the choice exists.
                         mask and ConditionTypes.CHARGER == 0 ->
                             "This profile can be active only while the device is charging, or only " +
-                                "while it is NOT charging — pick which once you turn this on."
+                                "when it is not charging."
                         // On: match the actual chosen behaviour, no vagueness.
                         state.chargerInverted ->
-                            "This profile is active only while the device is NOT charging."
+                            "This profile is active only when the device is not charging."
                         else ->
                             "This profile is active only while the device is charging."
                     },
@@ -382,5 +376,39 @@ private fun WheelColumn(label: String, value: Int, range: IntRange, locked: Bool
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         com.customblocker.ui.components.NumberWheel(value = value, range = range, onValue = onValue, enabled = !locked)
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** A saved location: reverse-geocoded name + radius + which side is blocked. Tap to edit on the map. */
+@Composable
+private fun GeofenceRow(geo: GeoAddressEntity, locked: Boolean, onEdit: () -> Unit, onRemove: () -> Unit) {
+    val context = LocalContext.current
+    // Prefer the stored label; otherwise reverse-geocode on the fly for display.
+    val name by produceState(
+        initialValue = geo.label?.takeIf { it.isNotBlank() },
+        geo.id, geo.latitude, geo.longitude,
+    ) {
+        if (value.isNullOrBlank()) value = Geocoding.describe(context, geo.latitude, geo.longitude)
+    }
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = !locked) { onEdit() },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Column(Modifier.weight(1f)) {
+            Text(
+                name ?: "%.4f, %.4f".format(geo.latitude, geo.longitude),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                "${geo.radiusMeters.toInt()} m · blocked ${if (geo.inverted) "outside" else "inside"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = onRemove, enabled = !locked) {
+            Icon(Icons.Default.Delete, contentDescription = "Remove location")
+        }
     }
 }

@@ -21,7 +21,7 @@ object Routes {
     const val PROFILE = "profile/{profileId}"
     const val PICKER = "picker/{profileId}"
     const val CONDITIONS = "conditions/{profileId}?expand={expand}"
-    const val MAP = "map/{profileId}"
+    const val MAP = "map/{profileId}?geoId={geoId}"
     const val WEBSITES = "websites/{profileId}"
     const val STRICT = "strict"
     const val STATS = "stats"
@@ -31,7 +31,8 @@ object Routes {
     fun picker(id: Long) = "picker/$id"
     fun conditions(id: Long, expand: Int? = null) =
         "conditions/$id" + (expand?.let { "?expand=$it" } ?: "")
-    fun map(id: Long) = "map/$id"
+    fun map(id: Long, geoId: Long? = null) =
+        "map/$id" + (geoId?.let { "?geoId=$it" } ?: "")
     fun websites(id: Long) = "websites/$id"
 }
 
@@ -71,11 +72,17 @@ fun AppNav() {
             val expand = entry.arguments?.getInt("expand") ?: 0
             ConditionsScreen(
                 onBack = { navController.popBackStack() },
-                onAddLocation = { navController.navigate(Routes.map(id)) },
+                onOpenMap = { geoId -> navController.navigate(Routes.map(id, geoId)) },
                 initialExpanded = expand.takeIf { it != 0 },
             )
         }
-        composable(Routes.MAP, arguments = profileIdArg) {
+        composable(
+            Routes.MAP,
+            arguments = listOf(
+                navArgument("profileId") { type = NavType.LongType },
+                navArgument("geoId") { type = NavType.LongType; defaultValue = -1L },
+            ),
+        ) {
             MapPickerScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.WEBSITES, arguments = profileIdArg) {

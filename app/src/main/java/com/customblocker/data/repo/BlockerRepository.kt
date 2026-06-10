@@ -182,6 +182,17 @@ class BlockerRepository @Inject constructor(
         ),
     )
 
+    suspend fun getGeo(id: Long): GeoAddressEntity? = dao.getGeo(id)
+
+    suspend fun updateGeo(
+        id: Long,
+        latitude: Double,
+        longitude: Double,
+        radiusMeters: Float,
+        inverted: Boolean,
+        label: String?,
+    ) = dao.updateGeo(id, latitude, longitude, radiusMeters, inverted, label)
+
     suspend fun removeGeo(id: Long) = dao.removeGeo(id)
 
     // --- websites / keywords ---

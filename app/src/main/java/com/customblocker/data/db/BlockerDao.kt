@@ -155,6 +155,12 @@ interface BlockerDao {
     @Insert
     suspend fun addGeo(geo: GeoAddressEntity)
 
+    @Query("SELECT * FROM geo_addresses WHERE id = :id")
+    suspend fun getGeo(id: Long): GeoAddressEntity?
+
+    @Query("UPDATE geo_addresses SET latitude = :lat, longitude = :lng, radiusMeters = :radius, inverted = :inverted, label = :label WHERE id = :id")
+    suspend fun updateGeo(id: Long, lat: Double, lng: Double, radius: Float, inverted: Boolean, label: String?)
+
     @Query("DELETE FROM geo_addresses WHERE id = :id")
     suspend fun removeGeo(id: Long)
 }
