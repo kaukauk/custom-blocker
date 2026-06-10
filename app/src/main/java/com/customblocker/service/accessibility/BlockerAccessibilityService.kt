@@ -71,6 +71,14 @@ class BlockerAccessibilityService : AccessibilityService() {
     private var lastForeground: String? = null
     /** The package whose foreground time we are currently accruing. */
     private var trackedPkg: String? = null
+    /**
+     * Packages that draw transient windows OVER the current app — the status bar / shade / heads-up
+     * notifications / immersive-mode chrome (SystemUI) and the on-screen keyboard (IMEs). They fire
+     * TYPE_WINDOW_STATE_CHANGED constantly (especially during fullscreen video), but they are NOT a
+     * foreground app switch: the real app is still underneath. Tracking them would stop usage accrual
+     * and stop re-evaluating the real app for blocking. So we ignore their window-state events.
+     */
+    @Volatile private var transientOverlays: Set<String> = setOf(SYSTEM_UI_PKG)
     private var sinceMs: Long = 0
     /** Last URL we evaluated, to skip re-evaluating unchanged content-changed spam. */
     private var lastUrl: String? = null
@@ -132,6 +140,10 @@ class BlockerAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                // A transient overlay (status bar / keyboard / heads-up) opened over the current app —
+                // not a foreground app switch. Ignore it so we keep tracking & re-evaluating the real
+                // app underneath (otherwise usage stops accruing and the app is never re-blocked).
+                if (pkg in transientOverlays) return
                 // Strict Mode L3: block the Settings app (except whitelisted screens like Wi-Fi /
                 // Bluetooth / Language) to stop the user disabling our service / force-stopping us /
                 // removing the device admin. Respects the TIMER commitment (lifts at its deadline).
@@ -269,12 +281,17 @@ class BlockerAccessibilityService : AccessibilityService() {
      */
     private fun resolveSystemPackages(): Set<String> {
         val pkgs = mutableSetOf<String>()
+        val imes = mutableSetOf<String>()
         getSystemService(InputMethodManager::class.java)?.enabledInputMethodList?.forEach {
-            pkgs += it.packageName
+            imes += it.packageName
         }
+        pkgs += imes
+        // IMEs + SystemUI are transient overlays (drawn over the real app), not foreground switches.
+        // The launcher is NOT included here: going home IS a real foreground change.
+        transientOverlays = imes + SYSTEM_UI_PKG
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         packageManager.resolveActivity(home, 0)?.activityInfo?.packageName?.let { pkgs += it }
-        L.d(L.FG, "system never-block: $pkgs")
+        L.d(L.FG, "system never-block: $pkgs ; transient overlays: $transientOverlays")
         return pkgs
     }
 
@@ -316,5 +333,6 @@ class BlockerAccessibilityService : AccessibilityService() {
 
     private companion object {
         const val TICK_MS = 3_000L
+        const val SYSTEM_UI_PKG = "com.android.systemui"
     }
 }
