@@ -22,6 +22,8 @@ data class ProfileRow(
     val enabled: Boolean,
     /** "Block list • Schedule • Wi-Fi • 1m 30s / 5m this hour" */
     val summary: String,
+    /** A usage/launch limit has been hit — the row is outlined to flag it's now blocking. */
+    val limitExceeded: Boolean,
 )
 
 @HiltViewModel
@@ -41,6 +43,14 @@ class ProfileListViewModel @Inject constructor(
             val launches = live.second
             profiles.map { p ->
                 val mine = limits.filter { it.profileId == p.id }
+                val usage = mine.find { it.limitType == BlockerRepository.LIMIT_USAGE }
+                val launch = mine.find { it.limitType == BlockerRepository.LIMIT_LAUNCH }
+                val used = usedSeconds[p.id] ?: 0
+                val launchesUsed = launches[p.id] ?: 0
+                val usageExceeded = p.conditionsMask and ConditionTypes.USAGE_LIMIT != 0 &&
+                    usage != null && used >= usage.amount * 60
+                val launchExceeded = p.conditionsMask and ConditionTypes.LAUNCH_COUNT != 0 &&
+                    launch != null && launchesUsed >= launch.amount
                 ProfileRow(
                     id = p.id,
                     title = p.title,
@@ -48,11 +58,14 @@ class ProfileListViewModel @Inject constructor(
                     summary = summarize(
                         isAllowlist = p.blockingMode == 1,
                         mask = p.conditionsMask,
-                        usage = mine.find { it.limitType == BlockerRepository.LIMIT_USAGE },
-                        launch = mine.find { it.limitType == BlockerRepository.LIMIT_LAUNCH },
-                        usedSeconds = usedSeconds[p.id] ?: 0,
-                        launchesUsed = launches[p.id] ?: 0,
+                        usage = usage,
+                        launch = launch,
+                        usedSeconds = used,
+                        launchesUsed = launchesUsed,
+                        usageExceeded = usageExceeded,
+                        launchExceeded = launchExceeded,
                     ),
+                    limitExceeded = p.enabled && (usageExceeded || launchExceeded),
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -86,6 +99,8 @@ class ProfileListViewModel @Inject constructor(
         launch: UsageLimitEntity?,
         usedSeconds: Int,
         launchesUsed: Int,
+        usageExceeded: Boolean,
+        launchExceeded: Boolean,
     ): String {
         val parts = mutableListOf(if (isAllowlist) "Allow list" else "Block list")
         if (mask and ConditionTypes.TIME != 0) parts += "Schedule"
@@ -93,10 +108,12 @@ class ProfileListViewModel @Inject constructor(
         if (mask and ConditionTypes.LOCATION != 0) parts += "Location"
         if (mask and ConditionTypes.CHARGER != 0) parts += "Charging"
         if (mask and ConditionTypes.USAGE_LIMIT != 0 && usage != null) {
-            parts += "${formatUsed(usedSeconds)} / ${usage.amount}m ${period(usage.periodDaily)}"
+            parts += if (usageExceeded) "No time left ${period(usage.periodDaily)}"
+            else "${formatUsed(usedSeconds)} / ${usage.amount}m ${period(usage.periodDaily)}"
         }
         if (mask and ConditionTypes.LAUNCH_COUNT != 0 && launch != null) {
-            parts += "$launchesUsed / ${launch.amount} launches ${period(launch.periodDaily)}"
+            parts += if (launchExceeded) "No launches left ${period(launch.periodDaily)}"
+            else "$launchesUsed / ${launch.amount} launches ${period(launch.periodDaily)}"
         }
         return parts.joinToString(" • ")
     }

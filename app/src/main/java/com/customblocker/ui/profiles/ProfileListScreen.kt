@@ -1,5 +1,6 @@
 package com.customblocker.ui.profiles
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -115,7 +117,18 @@ fun ProfileListScreen(
             }
             items(profiles, key = { it.id }) { profile ->
                 val pLocked = lockInfo.locked(profile.id)
-                Card(Modifier.fillMaxWidth().clickable { onOpenProfile(profile.id) }) {
+                val cardModifier = Modifier.fillMaxWidth()
+                    .then(
+                        if (profile.limitExceeded) {
+                            Modifier.border(
+                                width = 2.dp,
+                                color = MaterialTheme.colorScheme.error,
+                                shape = CardDefaults.shape,
+                            )
+                        } else Modifier,
+                    )
+                    .clickable { onOpenProfile(profile.id) }
+                Card(cardModifier) {
                     Row(
                         Modifier.fillMaxWidth().padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
