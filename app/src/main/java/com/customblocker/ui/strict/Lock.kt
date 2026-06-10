@@ -65,7 +65,7 @@ fun formatCountdown(ms: Long): String {
 /** Shared lock state for any screen with Strict-Mode-protected actions. */
 @HiltViewModel
 class LockViewModel @Inject constructor(
-    store: StrictModeStore,
+    private val store: StrictModeStore,
     private val unlock: UnlockManager,
 ) : ViewModel() {
 
@@ -85,9 +85,15 @@ class LockViewModel @Inject constructor(
             LockUi(locked = locked, config = cfg, remainingMillis = remaining)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LockUi())
 
-    fun markUnlocked() = unlock.markUnlocked()
+    fun markUnlocked() {
+        unlock.markUnlocked()
+        viewModelScope.launch { store.clearPinEmergency() }   // consumed → reset for next time
+    }
     fun isCharging() = unlock.isCharging()
     suspend fun verifyPin(pin: String) = unlock.verifyPin(pin)
+
+    /** Begin the forgot-PIN escape-hatch wait (persisted; survives relaunch). */
+    fun startPinEmergency() = viewModelScope.launch { store.startPinEmergency(System.currentTimeMillis()) }
 }
 
 /** Whether our device-admin (uninstall protection) is active, refreshed on every ON_RESUME. */
@@ -169,7 +175,7 @@ fun UnlockDialog(
             onConfirm = { lockViewModel.markUnlocked(); onUnlocked() },
             onDismiss = onDismiss,
         )
-        UnlockGate.PIN -> PinUnlock(lockViewModel, onUnlocked, onDismiss)
+        UnlockGate.PIN -> PinUnlock(config, lockViewModel, onUnlocked, onDismiss)
         UnlockGate.CHARGER -> ChargerUnlock(lockViewModel, onUnlocked, onDismiss)
         UnlockGate.COUNTDOWN -> CountdownUnlock(config.timerMinutes, lockViewModel, onUnlocked, onDismiss)
         UnlockGate.TIMER -> TimerCommitmentInfo(config.lockedUntilMillis, onDismiss)
@@ -187,11 +193,22 @@ private fun ConfirmUnlock(text: String, onConfirm: () -> Unit, onDismiss: () -> 
     )
 }
 
+/**
+ * PIN gate. Enter the PIN to unlock instantly. If the PIN is forgotten, the escape hatch lets the
+ * user start a long, persisted wait (config.pinEmergencyHours) after which they can unlock without
+ * it — so a forgotten PIN never means being permanently stuck, while staying strict.
+ */
 @Composable
-private fun PinUnlock(vm: LockViewModel, onUnlocked: () -> Unit, onDismiss: () -> Unit) {
+private fun PinUnlock(config: StrictModeConfig, vm: LockViewModel, onUnlocked: () -> Unit, onDismiss: () -> Unit) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(config.pinEmergencyUntilMillis) {
+        while (config.pinEmergencyPending(now)) { delay(1_000); now = System.currentTimeMillis() }
+    }
+    val pending = config.pinEmergencyPending(now)
+    val ready = config.pinEmergencyReady(now)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Enter PIN") },
@@ -208,14 +225,34 @@ private fun PinUnlock(vm: LockViewModel, onUnlocked: () -> Unit, onDismiss: () -
                 )
                 if (error) Text("Incorrect PIN", color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall)
+
+                when {
+                    ready -> Text(
+                        "Emergency unlock is ready — you can unlock without the PIN.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    pending -> Text(
+                        "Forgot your PIN? Emergency unlock available in " +
+                            "${formatCountdown(config.pinEmergencyUntilMillis - now)}. Keep Strict Mode on until then.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    else -> TextButton(
+                        onClick = { vm.startPinEmergency() },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                    ) { Text("Forgot PIN?") }
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                scope.launch {
-                    if (vm.verifyPin(pin)) { vm.markUnlocked(); onUnlocked() } else error = true
-                }
-            }, enabled = pin.length in 4..8) { Text("Unlock") }
+            if (ready) {
+                TextButton(onClick = { vm.markUnlocked(); onUnlocked() }) { Text("Unlock") }
+            } else {
+                TextButton(onClick = {
+                    scope.launch {
+                        if (vm.verifyPin(pin)) { vm.markUnlocked(); onUnlocked() } else error = true
+                    }
+                }, enabled = pin.length in 4..8) { Text("Unlock") }
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

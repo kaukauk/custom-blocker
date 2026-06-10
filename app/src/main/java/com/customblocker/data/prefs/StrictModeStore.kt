@@ -34,7 +34,7 @@ enum class UnlockGate { NONE, PIN, COUNTDOWN, TIMER, CHARGER }
 data class StrictModeConfig(
     val enabled: Boolean = false,
     val level: Int = 1,
-    val gate: UnlockGate = UnlockGate.NONE,
+    val gate: UnlockGate = UnlockGate.PIN,
     val timerMinutes: Int = 5,
     val hasPin: Boolean = false,
     /** Wall-clock instant the timed lock expires (0 = no timed lock). */
@@ -47,6 +47,10 @@ data class StrictModeConfig(
     val earnMaxMinutes: Int = 5,
     /** Wall-clock instant a granted earned-unlock expires (0 = blocking active). */
     val unlockUntilMillis: Long = 0L,
+    /** PIN gate escape hatch: how long (hours) to wait to unlock if the PIN is forgotten. */
+    val pinEmergencyHours: Int = 24,
+    /** Wall-clock instant a started "forgot PIN" emergency wait completes (0 = not started). */
+    val pinEmergencyUntilMillis: Long = 0L,
 ) {
     /** True while a TIMER-gate commitment is still running at wall-clock [now]. */
     fun timedLockActive(now: Long): Boolean =
@@ -54,6 +58,11 @@ data class StrictModeConfig(
 
     /** True while a granted earned-unlock is still bypassing blocking at wall-clock [now]. */
     fun earnedUnlockActive(now: Long): Boolean = unlockUntilMillis > now
+
+    /** A "forgot PIN" wait has been started but hasn't elapsed yet. */
+    fun pinEmergencyPending(now: Long): Boolean = pinEmergencyUntilMillis > now
+    /** A "forgot PIN" wait has been started and has now elapsed → emergency unlock is available. */
+    fun pinEmergencyReady(now: Long): Boolean = pinEmergencyUntilMillis in 1..now
 }
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -79,13 +88,15 @@ class StrictModeStore @Inject constructor(
         val EARN_WAIT = intPreferencesKey("strict_earn_wait_min")
         val EARN_MAX = intPreferencesKey("strict_earn_max_min")
         val UNLOCK_UNTIL = longPreferencesKey("strict_unlock_until")
+        val PIN_EMERGENCY_HOURS = intPreferencesKey("strict_pin_emergency_hours")
+        val PIN_EMERGENCY_UNTIL = longPreferencesKey("strict_pin_emergency_until")
     }
 
     val config: Flow<StrictModeConfig> = context.dataStore.data.map { p ->
         StrictModeConfig(
             enabled = p[Keys.ENABLED] ?: false,
             level = p[Keys.LEVEL] ?: 1,
-            gate = runCatching { UnlockGate.valueOf(p[Keys.GATE] ?: "NONE") }.getOrDefault(UnlockGate.NONE),
+            gate = runCatching { UnlockGate.valueOf(p[Keys.GATE] ?: "PIN") }.getOrDefault(UnlockGate.PIN),
             timerMinutes = p[Keys.TIMER] ?: 5,
             hasPin = !p[Keys.PIN_HASH].isNullOrEmpty(),
             lockedUntilMillis = p[Keys.LOCKED_UNTIL] ?: 0L,
@@ -93,6 +104,8 @@ class StrictModeStore @Inject constructor(
             earnWaitMinutes = (p[Keys.EARN_WAIT] ?: 5).coerceIn(EARN_WAIT_MIN, EARN_WAIT_MAX),
             earnMaxMinutes = (p[Keys.EARN_MAX] ?: 5).coerceIn(EARN_MAX_MIN, EARN_MAX_CAP),
             unlockUntilMillis = p[Keys.UNLOCK_UNTIL] ?: 0L,
+            pinEmergencyHours = (p[Keys.PIN_EMERGENCY_HOURS] ?: 24).coerceIn(PIN_EMERGENCY_FLOOR, PIN_EMERGENCY_MAX),
+            pinEmergencyUntilMillis = p[Keys.PIN_EMERGENCY_UNTIL] ?: 0L,
         )
     }
 
@@ -101,7 +114,10 @@ class StrictModeStore @Inject constructor(
 
     suspend fun setEnabled(enabled: Boolean) = context.dataStore.edit {
         it[Keys.ENABLED] = enabled
-        if (!enabled) it.remove(Keys.LOCKED_UNTIL)   // turning off ends any timed commitment
+        if (!enabled) {
+            it.remove(Keys.LOCKED_UNTIL)            // turning off ends any timed commitment
+            it.remove(Keys.PIN_EMERGENCY_UNTIL)     // ...and any pending forgot-PIN wait
+        }
     }
     suspend fun setLevel(level: Int) = context.dataStore.edit { it[Keys.LEVEL] = level.coerceIn(1, 3) }
     suspend fun setGate(gate: UnlockGate) = context.dataStore.edit { it[Keys.GATE] = gate.name }
@@ -137,11 +153,33 @@ class StrictModeStore @Inject constructor(
         const val EARN_WAIT_MAX = 10
         const val EARN_MAX_MIN = 1
         const val EARN_MAX_CAP = 5
+
+        /**
+         * Forgot-PIN emergency wait, in hours: 1–72 (up to 3 days). Debug builds allow 0 (instant)
+         * so the escape hatch can be tested without waiting.
+         */
+        val PIN_EMERGENCY_FLOOR = if (com.customblocker.BuildConfig.DEBUG) 0 else 1
+        const val PIN_EMERGENCY_MAX = 72
     }
 
     /** Grant a one-off earned unlock: bypass all blocking until now + [durationSeconds]. */
     suspend fun startEarnedUnlock(durationSeconds: Int, nowMillis: Long) =
         context.dataStore.edit { it[Keys.UNLOCK_UNTIL] = nowMillis + durationSeconds.coerceAtLeast(0).toLong() * 1000L }
+
+    suspend fun setPinEmergencyHours(hours: Int) =
+        context.dataStore.edit { it[Keys.PIN_EMERGENCY_HOURS] = hours.coerceIn(PIN_EMERGENCY_FLOOR, PIN_EMERGENCY_MAX) }
+
+    /**
+     * Start the "forgot PIN" escape hatch: stamp a wall-clock deadline [pinEmergencyHours] from now.
+     * Once it elapses the user can unlock without the PIN — strict (a long wait), but never permanently
+     * stuck. The deadline persists across app close / reboot so it can't be reset by relaunching.
+     */
+    suspend fun startPinEmergency(nowMillis: Long) = context.dataStore.edit {
+        val hours = (it[Keys.PIN_EMERGENCY_HOURS] ?: 24).coerceIn(PIN_EMERGENCY_FLOOR, PIN_EMERGENCY_MAX)
+        it[Keys.PIN_EMERGENCY_UNTIL] = nowMillis + hours.toLong() * 3_600_000L
+    }
+
+    suspend fun clearPinEmergency() = context.dataStore.edit { it.remove(Keys.PIN_EMERGENCY_UNTIL) }
 
     suspend fun setPin(pin: String) = context.dataStore.edit { p ->
         val salt = newSalt()

@@ -32,6 +32,7 @@ class StrictModeViewModel @Inject constructor(
     fun setGate(gate: UnlockGate) = viewModelScope.launch { store.setGate(gate) }
     fun setTimerMinutes(minutes: Int) = viewModelScope.launch { store.setTimerMinutes(minutes) }
     fun setPin(pin: String) = viewModelScope.launch { store.setPin(pin) }
+    fun setPinEmergencyHours(hours: Int) = viewModelScope.launch { store.setPinEmergencyHours(hours) }
     fun setEarnedUnlockEnabled(enabled: Boolean) = viewModelScope.launch { store.setEarnedUnlockEnabled(enabled) }
     fun setEarnWaitMinutes(minutes: Int) = viewModelScope.launch { store.setEarnWaitMinutes(minutes) }
     fun setEarnMaxMinutes(minutes: Int) = viewModelScope.launch { store.setEarnMaxMinutes(minutes) }

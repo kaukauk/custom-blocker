@@ -22,5 +22,4 @@ class SettingsViewModel @Inject constructor(
 
     fun setDayStartHour(hour: Int) = viewModelScope.launch { store.setDayStartHour(hour) }
     fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { store.setThemeMode(mode) }
-    fun setDefaultAllowlist(enabled: Boolean) = viewModelScope.launch { store.setDefaultAllowlist(enabled) }
 }
