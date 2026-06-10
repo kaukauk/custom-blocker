@@ -201,13 +201,6 @@ class BlockerRepository @Inject constructor(
     suspend fun setBatchNotifications(profileId: Long, batch: Boolean) =
         edit(profileId) { it.copy(batchNotifications = batch) }
 
-    suspend fun setAddNewApps(profileId: Long, enabled: Boolean) =
-        edit(profileId) { it.copy(addNewApps = enabled) }
-
-    /** Profiles flagged to auto-add new installs (used by PackageAddedReceiver). */
-    suspend fun profilesAutoAddingApps(): List<ProfileEntity> =
-        dao.getProfilesWithAddNewApps()
-
     // --- statistics (Phase 7) ---
     fun observeAppStats(fromDay: Long, toDay: Long): Flow<List<AppStat>> =
         dao.observeAppStats(fromDay, toDay)

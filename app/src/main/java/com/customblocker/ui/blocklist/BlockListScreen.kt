@@ -219,15 +219,6 @@ fun BlockListScreen(
                     }
                 }
                 item {
-                    ToggleRow(
-                        title = "Auto-block new apps",
-                        subtitle = "Add newly-installed apps to this profile automatically.",
-                        checked = state.addNewApps,
-                        enabled = !(editLocked && state.addNewApps),
-                        onCheckedChange = viewModel::setAddNewApps,
-                    )
-                }
-                item {
                     Text(
                         if (state.mode == BlockingMode.BLOCKLIST) "Blocked apps (${state.apps.size})"
                         else "Allowed apps (${state.apps.size})",

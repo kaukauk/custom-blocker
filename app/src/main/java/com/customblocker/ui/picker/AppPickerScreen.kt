@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -78,15 +80,16 @@ fun AppPickerScreen(
                             enabled = rowEnabled,
                             onCheckedChange = { viewModel.toggle(app.packageName, add = it) },
                         )
-                        Column(Modifier.weight(1f)) {
-                            Text(app.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                app.packageName,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                        com.customblocker.ui.components.AppIcon(
+                            packageName = app.packageName,
+                            modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small),
+                        )
+                        Text(
+                            app.label,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }

@@ -230,24 +230,28 @@ fun ProfileListScreen(
     }
 
     customPauseFor?.let { profileId ->
-        var minutes by remember { mutableStateOf("30") }
+        var minutes by remember { mutableStateOf(30) }
         AlertDialog(
             onDismissRequest = { customPauseFor = null },
             title = { Text("Pause for…") },
             text = {
-                OutlinedTextField(
-                    value = minutes,
-                    onValueChange = { minutes = it.filter(Char::isDigit).take(4) },
-                    label = { Text("Minutes") },
-                    singleLine = true,
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    com.customblocker.ui.components.NumberWheel(
+                        value = minutes,
+                        range = 1..180,
+                        onValue = { minutes = it },
+                    )
+                    Text("minutes", Modifier.padding(start = 12.dp))
+                }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        minutes.toIntOrNull()?.takeIf { it > 0 }?.let {
-                            viewModel.pauseProfile(profileId, it * 60_000L)
-                        }
+                        viewModel.pauseProfile(profileId, minutes * 60_000L)
                         customPauseFor = null
                     },
                 ) { Text("Pause") }

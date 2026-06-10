@@ -38,9 +38,6 @@ interface BlockerDao {
     @Query("UPDATE profiles SET pausedUntilMillis = :millis WHERE id = :id")
     suspend fun setPausedUntilMillis(id: Long, millis: Long)
 
-    @Query("SELECT * FROM profiles WHERE addNewApps = 1 AND enabled = 1")
-    suspend fun getProfilesWithAddNewApps(): List<ProfileEntity>
-
     // --- apps ---
     @Query("SELECT * FROM profile_apps ORDER BY packageName")
     fun observeAllApps(): Flow<List<ProfileAppEntity>>

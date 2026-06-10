@@ -29,7 +29,7 @@ data class ProfileEntity(
     /** Suppress notifications from targeted apps while this profile is active. */
     val blockNotifications: Boolean = false,
     /** When blocking notifications: true = batch (snooze, re-deliver at next reset), false = hide. */
-    val batchNotifications: Boolean = false,
+    val batchNotifications: Boolean = true,
     /** Automatically add newly-installed launchable apps to this profile's list. */
     val addNewApps: Boolean = false,
     /** Temporarily inactive until this wall-clock instant (0 = not paused). Auto-resumes after. */

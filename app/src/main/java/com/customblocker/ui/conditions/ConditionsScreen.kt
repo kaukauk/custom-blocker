@@ -311,54 +311,33 @@ private fun LimitEditor(
 ) {
     // Locked: only accept a decrease (block sooner), never an increase.
     fun commit(n: Int) { if (n > 0 && (!locked || n < value)) onValue(n) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (isTime && daily) {
-            // Per-day time limits can be long, so split into hours + minutes fields.
-            var hoursText by remember(value) { mutableStateOf((value / 60).toString()) }
-            var minsText by remember(value) { mutableStateOf((value % 60).toString()) }
-            fun commitHm() {
-                val total = (hoursText.toIntOrNull() ?: 0) * 60 + (minsText.toIntOrNull() ?: 0)
-                commit(total)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            if (isTime && daily) {
+                // Per-day time limits can be long → separate hours + minutes wheels.
+                WheelColumn("hours", value / 60, 0..23, locked) { h -> commit(h * 60 + value % 60) }
+                WheelColumn("minutes", value % 60, 0..59, locked) { m -> commit((value / 60) * 60 + m) }
+            } else if (isTime) {
+                WheelColumn("minutes", value, 1..60, locked) { commit(it) }
+            } else {
+                WheelColumn(unitLabel, value, 1..100, locked) { commit(it) }
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = hoursText,
-                    onValueChange = { hoursText = it.filter(Char::isDigit).take(2); commitHm() },
-                    label = { Text("hours") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.width(110.dp),
-                )
-                OutlinedTextField(
-                    value = minsText,
-                    onValueChange = { minsText = it.filter(Char::isDigit).take(2); commitHm() },
-                    label = { Text("minutes") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.width(110.dp),
-                )
-            }
-        } else {
-            var text by remember(value) { mutableStateOf(value.toString()) }
-            OutlinedTextField(
-                value = text,
-                onValueChange = {
-                    text = it.filter(Char::isDigit).take(4)
-                    text.toIntOrNull()?.let(::commit)
-                },
-                label = { Text(unitLabel) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.width(140.dp),
-            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = daily, onClick = { onPeriod(true) }, label = { Text("Per day") }, enabled = !locked)
             FilterChip(selected = !daily, onClick = { onPeriod(false) }, label = { Text("Per hour") }, enabled = !locked)
         }
+    }
+}
+
+@Composable
+private fun WheelColumn(label: String, value: Int, range: IntRange, locked: Boolean, onValue: (Int) -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        com.customblocker.ui.components.NumberWheel(value = value, range = range, onValue = onValue, enabled = !locked)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
