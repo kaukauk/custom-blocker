@@ -14,8 +14,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -57,18 +60,12 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import kotlin.math.cos
 
 /** Blue = the region where this profile is active ("blocked"). */
-private val BLOCK_FILL = 0x993D5AFE.toInt()
+private val BLOCK_FILL = 0x553D5AFE
 private val BLOCK_LINE = 0xFF3D5AFE.toInt()
 private val BlockSwatch = Color(0xFF3D5AFE)
-
-/** Outer ring covering the whole map — for "blocked outside", with the circle cut out as a hole.
- *  Covering everything means panning/zooming never reveals an edge. */
-private val WORLD_RING = listOf(
-    GeoPoint(85.0, -179.9), GeoPoint(85.0, 179.9),
-    GeoPoint(-85.0, 179.9), GeoPoint(-85.0, -179.9),
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,8 +112,8 @@ fun MapPickerScreen(
             if (!inverted) {
                 points = circle                                // blocked INSIDE the circle
             } else {
-                points = WORLD_RING                            // blocked OUTSIDE: cover the whole map…
-                holes = listOf(circle)                         // …with the circle cut out (clear)
+                points = squareAround(p, maxOf(radius * 25.0, 8_000.0))  // blocked OUTSIDE…
+                holes = listOf(circle)                                   // …with the circle cut out
             }
         }
         mapView.overlays.add(poly)
@@ -175,7 +172,7 @@ fun MapPickerScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().height(340.dp)) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = {
@@ -223,7 +220,14 @@ fun MapPickerScreen(
                 ) { Icon(Icons.Default.MyLocation, contentDescription = "My location") }
             }
 
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .weight(1f)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Text(
                     placeName ?: picked?.let { "%.5f, %.5f".format(it.latitude, it.longitude) }
                         ?: "Tap the map to choose a spot",
@@ -273,4 +277,16 @@ fun MapPickerScreen(
             }
         }
     }
+}
+
+/** A square of [halfMeters] half-side around [center] — the outer ring for the "blocked outside" fill. */
+private fun squareAround(center: GeoPoint, halfMeters: Double): List<GeoPoint> {
+    val dLat = halfMeters / 111_320.0
+    val dLng = halfMeters / (111_320.0 * cos(Math.toRadians(center.latitude)))
+    return listOf(
+        GeoPoint(center.latitude - dLat, center.longitude - dLng),
+        GeoPoint(center.latitude - dLat, center.longitude + dLng),
+        GeoPoint(center.latitude + dLat, center.longitude + dLng),
+        GeoPoint(center.latitude + dLat, center.longitude - dLng),
+    )
 }
