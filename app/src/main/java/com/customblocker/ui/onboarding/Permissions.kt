@@ -4,12 +4,31 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import com.customblocker.service.accessibility.BlockerAccessibilityService
+import com.customblocker.service.notifications.BlockerNotificationListener
 
 /** Checks + Settings deep-links for the two permissions the core engine needs (PLAN.md §14). */
 object Permissions {
+
+    // Settings reuses a single task: launching a deep-link with only NEW_TASK can surface whatever
+    // screen the user last left Settings on (e.g. they wandered off to another app's settings).
+    // CLEAR_TASK resets that task to the screen we actually asked for.
+    private const val FRESH_TASK = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
+    // Undocumented-but-stable AOSP/Pixel extras: highlight + scroll to a specific preference (by its
+    // key) within a Settings list. We use it to point the user straight at our app's row.
+    private const val EXTRA_FRAGMENT_ARG_KEY = ":settings:fragment_args_key"
+    private const val EXTRA_SHOW_FRAGMENT_ARGS = ":settings:show_fragment_args"
+
+    /** Adds the highlight-this-preference extras so Settings scrolls to and flashes [key]. */
+    private fun Intent.highlight(key: String): Intent {
+        putExtra(EXTRA_FRAGMENT_ARG_KEY, key)
+        putExtra(EXTRA_SHOW_FRAGMENT_ARGS, Bundle().apply { putString(EXTRA_FRAGMENT_ARG_KEY, key) })
+        return this
+    }
 
     /** Whether the app is exempt from Doze/battery optimization (improves background reliability). */
     fun isIgnoringBatteryOptimizations(context: Context): Boolean {
@@ -24,7 +43,7 @@ object Permissions {
             Intent(
                 Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                 Uri.parse("package:${context.packageName}"),
-            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            ).addFlags(FRESH_TASK),
         )
     }
 
@@ -47,16 +66,20 @@ object Permissions {
     }
 
     fun openNotificationAccessSettings(context: Context) {
+        val key = ComponentName(context, BlockerNotificationListener::class.java).flattenToString()
         context.startActivity(
             Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                .addFlags(FRESH_TASK)
+                .highlight(key),
         )
     }
 
     fun openAccessibilitySettings(context: Context) {
+        val key = ComponentName(context, BlockerAccessibilityService::class.java).flattenToString()
         context.startActivity(
             Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                .addFlags(FRESH_TASK)
+                .highlight(key),
         )
     }
 
@@ -65,7 +88,7 @@ object Permissions {
             Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:${context.packageName}"),
-            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            ).addFlags(FRESH_TASK),
         )
     }
 
@@ -73,7 +96,8 @@ object Permissions {
     fun openBatteryOptimizationSettings(context: Context) {
         context.startActivity(
             Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                .addFlags(FRESH_TASK)
+                .highlight(context.packageName),
         )
     }
 }
