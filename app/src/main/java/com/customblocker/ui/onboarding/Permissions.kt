@@ -66,11 +66,22 @@ object Permissions {
     }
 
     fun openNotificationAccessSettings(context: Context) {
-        val key = ComponentName(context, BlockerNotificationListener::class.java).flattenToString()
+        val component = ComponentName(context, BlockerNotificationListener::class.java)
+        // API 30+ can deep-link to OUR per-app notification-access screen (a single toggle) instead
+        // of the long list. Fall back to the list (highlighting our row) on older devices.
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .addFlags(FRESH_TASK)
+                .putExtra(
+                    Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                    component.flattenToString(),
+                )
+            if (runCatching { context.startActivity(detail) }.isSuccess) return
+        }
         context.startActivity(
             Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
                 .addFlags(FRESH_TASK)
-                .highlight(key),
+                .highlight(component.flattenToString()),
         )
     }
 

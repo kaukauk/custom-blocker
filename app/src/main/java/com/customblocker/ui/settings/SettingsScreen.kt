@@ -125,7 +125,12 @@ fun SettingsScreen(
                     PermissionItem("Accessibility", "To detect which app is in the foreground and block it.", accessibilityOn) { Permissions.openAccessibilitySettings(context) },
                     PermissionItem("Display over other apps", "To show the block screen on top of a blocked app.", overlayOn) { Permissions.openOverlaySettings(context) },
                     PermissionItem("Notification access", "Lets the app hide or batch notifications from blocked apps.", notificationOn) { Permissions.openNotificationAccessSettings(context) },
-                    PermissionItem("Run without battery limits", "Keeps blocking running in the background.", batteryExempt) { Permissions.openBatteryOptimizationSettings(context) },
+                    PermissionItem("Run without battery limits", "Keeps blocking running in the background.", batteryExempt) {
+                        // Off → the one-tap "Allow" system pop-up (no list to scroll). On → the list,
+                        // the only place it can be revoked.
+                        if (batteryExempt) Permissions.openBatteryOptimizationSettings(context)
+                        else Permissions.requestIgnoreBatteryOptimizations(context)
+                    },
                     PermissionItem("Device admin", "Powers uninstall protection · Strict Mode level 2 and up.", deviceAdminActive) { openDeviceAdmin(context, deviceAdminActive) },
                 )
                 Column {
