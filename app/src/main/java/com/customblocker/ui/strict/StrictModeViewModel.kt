@@ -1,11 +1,14 @@
 package com.customblocker.ui.strict
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.customblocker.data.prefs.StrictModeConfig
 import com.customblocker.data.prefs.StrictModeStore
 import com.customblocker.data.prefs.UnlockGate
+import com.customblocker.service.admin.BlockerDeviceAdminReceiver
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -14,6 +17,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class StrictModeViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val store: StrictModeStore,
 ) : ViewModel() {
 
@@ -23,6 +27,8 @@ class StrictModeViewModel @Inject constructor(
     fun setEnabled(enabled: Boolean) = viewModelScope.launch {
         // The PIN gate is meaningless without a PIN — don't let Strict Mode turn on until one is set.
         if (enabled && config.value.gate == UnlockGate.PIN && !config.value.hasPin) return@launch
+        // L2/L3 rely on Device admin (uninstall protection) — don't turn on until it's granted.
+        if (enabled && config.value.level >= 2 && !BlockerDeviceAdminReceiver.isActive(context)) return@launch
         // Enabling with the TIMER gate starts a fixed-deadline commitment (can't be turned off early).
         if (enabled && config.value.gate == UnlockGate.TIMER) {
             store.startTimedLock(config.value.timerMinutes, System.currentTimeMillis())

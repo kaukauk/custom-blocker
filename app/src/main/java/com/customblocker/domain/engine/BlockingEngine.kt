@@ -42,6 +42,10 @@ class BlockingEngine @Inject constructor() {
         "com.google.android.apps.nexuslauncher",
         "com.android.launcher",
         "com.android.launcher3",
+        // Runtime permission dialogs — not a real app; an allow-list must never eject these or the
+        // user can't grant/deny permissions (and they pop up over other apps during normal use).
+        "com.google.android.permissioncontroller",
+        "com.android.permissioncontroller",
     )
 
     /**

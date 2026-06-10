@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -92,8 +93,10 @@ fun StrictModeScreen(
     val locked = lock.locked
     var showUnlock by remember { mutableStateOf(false) }
     val earnUnlock = rememberEarnUnlockLauncher(lock.config)
-    // Accordion: at most one unlock-method card expanded at a time (open the selected one by default).
-    var expandedGate by remember { mutableStateOf<UnlockGate?>(config.gate) }
+    // Accordion: at most one unlock-method card expanded at a time. Start with none expanded.
+    var expandedGate by remember { mutableStateOf<UnlockGate?>(null) }
+    val context = LocalContext.current
+    val deviceAdminActive by rememberDeviceAdminActive()
 
     if (showUnlock) {
         UnlockDialog(
@@ -137,22 +140,25 @@ fun StrictModeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val needsPin = config.gate == UnlockGate.PIN && !config.hasPin
+                    val needsDeviceAdmin = config.level >= 2 && !deviceAdminActive
+                    val blocked = !config.enabled && (needsPin || needsDeviceAdmin)
                     Column(Modifier.weight(1f)) {
                         Text("Strict Mode", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            if (needsPin && !config.enabled)
-                                "Set a PIN below before you can turn on the PIN gate."
-                            else
-                                "Makes blocking harder to bypass. Choose how strict and how to unlock.",
+                            when {
+                                needsPin && !config.enabled -> "Set a PIN below before you can turn on the PIN gate."
+                                needsDeviceAdmin && !config.enabled -> "Level ${config.level} needs Device admin — turn it on below first."
+                                else -> "Makes blocking harder to bypass. Choose how strict and how to unlock."
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (needsPin && !config.enabled) MaterialTheme.colorScheme.error
+                            color = if (blocked) MaterialTheme.colorScheme.error
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Switch(
                         checked = config.enabled,
                         onCheckedChange = viewModel::setEnabled,
-                        enabled = !locked && !(needsPin && !config.enabled),
+                        enabled = !locked && !blocked,
                     )
                 }
             }
@@ -171,6 +177,33 @@ fun StrictModeScreen(
                     enabled = !locked,
                     onClick = { viewModel.setLevel(lvl) },
                 )
+            }
+
+            // L2/L3 block uninstalling, which needs the Device admin permission. Explain + offer to
+            // grant it; Strict Mode can't be turned on at these levels until it's active.
+            if (config.level >= 2 && !deviceAdminActive) {
+                item {
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Device admin needed for level ${config.level}", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "This level stops the app being uninstalled, which needs the Device admin " +
+                                    "permission. Strict Mode won't work right and can't be turned on at this " +
+                                    "level until it's granted.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            FilledTonalButton(onClick = {
+                                context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context))
+                            }) { Text("Turn on device admin") }
+                        }
+                    }
+                }
             }
 
             item {
@@ -221,13 +254,6 @@ fun StrictModeScreen(
                 }
             }
 
-            if (config.level >= 2) {
-                item {
-                    Text("Uninstall protection", style = MaterialTheme.typography.titleSmall)
-                    HorizontalDivider()
-                }
-                item { DeviceAdminCard(locked = locked, onUnlockNeeded = { showUnlock = true }) }
-            }
         }
     }
 }
@@ -355,32 +381,6 @@ private fun PinEditor(config: com.customblocker.data.prefs.StrictModeConfig, loc
     }
 }
 
-@Composable
-private fun DeviceAdminCard(locked: Boolean, onUnlockNeeded: () -> Unit) {
-    val context = LocalContext.current
-    val active by rememberDeviceAdminActive()
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                if (active) "Uninstall protection is ON" else "Uninstall protection is OFF",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                "When on, Android won't let Custom Blocker be uninstalled. Turning it off requires unlocking.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            if (!active) {
-                TextButton(onClick = { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) }) {
-                    Text("Turn on")
-                }
-            } else {
-                TextButton(onClick = {
-                    if (locked) onUnlockNeeded() else BlockerDeviceAdminReceiver.deactivate(context)
-                }) { Text("Turn off") }
-            }
-        }
-    }
-}
 
 /** Duration picker built from scroll wheels (days?/hours/minutes); writes the total minutes live. */
 @Composable
