@@ -127,9 +127,10 @@ fun NotificationNudgeBanner(modifier: Modifier = Modifier) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Notifications are still getting through", style = MaterialTheme.typography.titleMedium)
             Text(
-                "While a profile is blocking, those apps can still buzz and pull you back in. Turn on " +
-                    "notification access and we'll hold them instead — quietly batched and delivered once " +
-                    "the block lifts (like the top of the hour), so you're not constantly pinged without missing a thing.",
+                "While a profile is actively blocking an app, its notifications can still buzz and pull " +
+                    "you back in. Turn on notification access and we'll hold those — only while it's being " +
+                    "blocked — then deliver them when the block lifts (like the top of the hour). Any other " +
+                    "time, notifications come through as normal. So you're not constantly pinged, but never miss a thing.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Button(
