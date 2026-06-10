@@ -118,40 +118,30 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                PermissionRow(
-                    label = "Accessibility",
-                    subtitle = "To detect which app is in the foreground and block it.",
-                    granted = accessibilityOn,
-                    onClick = { Permissions.openAccessibilitySettings(context) },
+                val perms = listOf(
+                    PermissionItem("Accessibility", "To detect which app is in the foreground and block it.", accessibilityOn) { Permissions.openAccessibilitySettings(context) },
+                    PermissionItem("Display over other apps", "To show the block screen on top of a blocked app.", overlayOn) { Permissions.openOverlaySettings(context) },
+                    PermissionItem("Notification access", "Lets the app hide or batch notifications from blocked apps.", notificationOn) { Permissions.openNotificationAccessSettings(context) },
+                    PermissionItem("Run without battery limits", "Keeps blocking running in the background.", batteryExempt) { Permissions.openBatteryOptimizationSettings(context) },
+                    PermissionItem("Device admin", "Powers uninstall protection · Strict Mode level 2 and up.", deviceAdminActive) { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) },
                 )
-                PermissionRow(
-                    label = "Display over other apps",
-                    subtitle = "To show the block screen on top of a blocked app.",
-                    granted = overlayOn,
-                    onClick = { Permissions.openOverlaySettings(context) },
-                )
-                PermissionRow(
-                    label = "Notification access",
-                    subtitle = "Lets the app hide or batch notifications from blocked apps.",
-                    granted = notificationOn,
-                    onClick = { Permissions.openNotificationAccessSettings(context) },
-                )
-                PermissionRow(
-                    label = "Run without battery limits",
-                    subtitle = "Keeps blocking running in the background.",
-                    granted = batteryExempt,
-                    onClick = { Permissions.openBatteryOptimizationSettings(context) },
-                )
-                PermissionRow(
-                    label = "Device admin",
-                    subtitle = "Powers uninstall protection · Strict Mode level 2 and up.",
-                    granted = deviceAdminActive,
-                    onClick = { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) },
-                )
+                Column {
+                    perms.forEachIndexed { i, p ->
+                        if (i > 0) HorizontalDivider(Modifier.padding(start = 38.dp))
+                        PermissionRow(p.label, p.granted, p.onClick, p.subtitle)
+                    }
+                }
             }
         }
     }
 }
+
+private data class PermissionItem(
+    val label: String,
+    val subtitle: String,
+    val granted: Boolean,
+    val onClick: () -> Unit,
+)
 
 /**
  * One permission, always tappable (so the user can turn it on OR off in system settings). Green
@@ -180,7 +170,6 @@ private fun PermissionRow(label: String, granted: Boolean, onClick: () -> Unit, 
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp),   // hanging indent under the name
                 )
             }
         }
