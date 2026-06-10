@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
@@ -102,6 +104,38 @@ fun ReliabilityBanner(modifier: Modifier = Modifier) {
             Button(onClick = { Permissions.requestIgnoreBatteryOptimizations(context) }) {
                 Text("Allow background activity")
             }
+        }
+    }
+}
+
+/**
+ * A persuasive amber nudge (not a hard requirement): without notification access, blocked apps can
+ * still buzz and badge. Hidden once granted. Distinct from the red [PermissionBanner] (which means
+ * blocking can't run at all).
+ */
+@Composable
+fun NotificationNudgeBanner(modifier: Modifier = Modifier) {
+    val granted by rememberNotificationAccessState()
+    if (granted) return
+    val context = LocalContext.current
+    val amber = Color(0xFFFFB300)
+    val onAmber = Color(0xFF241A00)
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = amber, contentColor = onAmber),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Notifications are still getting through", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "While a profile is blocking, those apps can still buzz, badge, and lure you back in. " +
+                    "Turn on notification access and they go silent — blocking the apps means nothing if " +
+                    "they can still pull at your attention.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Button(
+                onClick = { Permissions.openNotificationAccessSettings(context) },
+                colors = ButtonDefaults.buttonColors(containerColor = onAmber, contentColor = amber),
+            ) { Text("Turn on notification access") }
         }
     }
 }

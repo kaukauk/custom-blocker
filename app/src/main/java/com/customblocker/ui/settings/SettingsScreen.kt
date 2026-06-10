@@ -1,5 +1,8 @@
 package com.customblocker.ui.settings
 
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -123,7 +126,7 @@ fun SettingsScreen(
                     PermissionItem("Display over other apps", "To show the block screen on top of a blocked app.", overlayOn) { Permissions.openOverlaySettings(context) },
                     PermissionItem("Notification access", "Lets the app hide or batch notifications from blocked apps.", notificationOn) { Permissions.openNotificationAccessSettings(context) },
                     PermissionItem("Run without battery limits", "Keeps blocking running in the background.", batteryExempt) { Permissions.openBatteryOptimizationSettings(context) },
-                    PermissionItem("Device admin", "Powers uninstall protection · Strict Mode level 2 and up.", deviceAdminActive) { context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context)) },
+                    PermissionItem("Device admin", "Powers uninstall protection · Strict Mode level 2 and up.", deviceAdminActive) { openDeviceAdmin(context, deviceAdminActive) },
                 )
                 Column {
                     perms.forEachIndexed { i, p ->
@@ -142,6 +145,25 @@ private data class PermissionItem(
     val granted: Boolean,
     val onClick: () -> Unit,
 )
+
+/**
+ * If device admin is off → the system activation prompt. If on → the system Device admin apps
+ * screen (so the user can turn it off there); the row refreshes on return. Falls back to Security
+ * settings if that screen isn't directly reachable on this device.
+ */
+private fun openDeviceAdmin(context: Context, active: Boolean) {
+    if (!active) {
+        context.startActivity(BlockerDeviceAdminReceiver.activationIntent(context))
+        return
+    }
+    val deviceAdminList = Intent()
+        .setClassName("com.android.settings", "com.android.settings.DeviceAdminSettings")
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val opened = runCatching { context.startActivity(deviceAdminList) }.isSuccess
+    if (!opened) {
+        context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
 
 /**
  * One permission, always tappable (so the user can turn it on OR off in system settings). Green

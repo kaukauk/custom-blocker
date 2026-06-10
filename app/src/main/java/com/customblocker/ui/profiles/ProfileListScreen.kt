@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.customblocker.ui.onboarding.NotificationNudgeBanner
 import com.customblocker.ui.onboarding.PermissionBanner
 import com.customblocker.ui.onboarding.ReliabilityBanner
 import com.customblocker.ui.onboarding.rememberPermissionState
@@ -112,6 +113,7 @@ fun ProfileListScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { PermissionBanner(accessibilityOn = accessibilityOn, overlayOn = overlayOn) }
+            item { NotificationNudgeBanner() }
             item { ReliabilityBanner() }
             if (locked) {
                 item {
