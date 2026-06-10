@@ -101,7 +101,9 @@ fun MapPickerScreen(
                 position = p
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 infoWindow = null                              // no pop-up bubble on tap
-                setOnMarkerClickListener { _, _ -> false }     // let the tap fall through to move the point
+                // Tapping the pin itself removes it (so you can re-drop it, e.g. on your location).
+                // Taps elsewhere fall through to the map overlay and move the point.
+                setOnMarkerClickListener { _, _ -> if (editMode) { picked = null; redraw() }; true }
             },
         )
         val circle = Polygon.pointsAsCircle(p, radius.toDouble())
@@ -134,10 +136,11 @@ fun MapPickerScreen(
         myLocation.runOnFirstFix {
             val gp = myLocation.myLocation ?: return@runOnFirstFix
             mainHandler.post {
-                picked = GeoPoint(gp.latitude, gp.longitude)
-                mapView.controller.animateTo(picked)
+                val here = GeoPoint(gp.latitude, gp.longitude)
+                mapView.controller.animateTo(here)
                 mapView.controller.setZoom(17.0)
-                redraw()
+                // Only drop the pin here if one isn't already placed (tap the pin to remove it first).
+                if (picked == null) { picked = here; redraw() }
             }
         }
     }
