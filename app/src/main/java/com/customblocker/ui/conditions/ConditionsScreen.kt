@@ -237,6 +237,7 @@ fun ConditionsScreen(
                         onValue = { viewModel.setUsageLimit(it, state.usageDaily) },
                         onPeriod = { viewModel.setUsageLimit(state.usageMinutes ?: 15, it) },
                         locked = locked,
+                        isTime = true,
                     )
                 }
             }
@@ -306,19 +307,47 @@ private fun LimitEditor(
     onValue: (Int) -> Unit,
     onPeriod: (Boolean) -> Unit,
     locked: Boolean = false,
+    isTime: Boolean = false,
 ) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
+    // Locked: only accept a decrease (block sooner), never an increase.
+    fun commit(n: Int) { if (n > 0 && (!locked || n < value)) onValue(n) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        if (isTime && daily) {
+            // Per-day time limits can be long, so split into hours + minutes fields.
+            var hoursText by remember(value) { mutableStateOf((value / 60).toString()) }
+            var minsText by remember(value) { mutableStateOf((value % 60).toString()) }
+            fun commitHm() {
+                val total = (hoursText.toIntOrNull() ?: 0) * 60 + (minsText.toIntOrNull() ?: 0)
+                commit(total)
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = hoursText,
+                    onValueChange = { hoursText = it.filter(Char::isDigit).take(2); commitHm() },
+                    label = { Text("hours") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.width(110.dp),
+                )
+                OutlinedTextField(
+                    value = minsText,
+                    onValueChange = { minsText = it.filter(Char::isDigit).take(2); commitHm() },
+                    label = { Text("minutes") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.width(110.dp),
+                )
+            }
+        } else {
+            var text by remember(value) { mutableStateOf(value.toString()) }
             OutlinedTextField(
                 value = text,
                 onValueChange = {
                     text = it.filter(Char::isDigit).take(4)
-                    // Locked: only accept a decrease (block sooner), never an increase.
-                    text.toIntOrNull()?.let { n -> if (n > 0 && (!locked || n < value)) onValue(n) }
+                    text.toIntOrNull()?.let(::commit)
                 },
                 label = { Text(unitLabel) },
                 singleLine = true,

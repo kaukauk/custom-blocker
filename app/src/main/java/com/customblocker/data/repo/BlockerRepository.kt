@@ -79,6 +79,7 @@ class BlockerRepository @Inject constructor(
                 blockUnsupportedBrowsers = p.blockUnsupportedBrowsers,
                 blockLaunch = p.blockLaunch,
                 blockNotifications = p.blockNotifications,
+                pausedUntilMillis = p.pausedUntilMillis,
                 timeWindows = intervals.filter { it.profileId == p.id }
                     .map { TimeWindow(it.fromMinuteOfDay, it.toMinuteOfDay) },
                 wifiSsids = wifi.filter { it.profileId == p.id }.map { it.ssid }.toSet(),
@@ -124,6 +125,9 @@ class BlockerRepository @Inject constructor(
     suspend fun removeApp(profileId: Long, packageName: String) = dao.removeApp(profileId, packageName)
 
     suspend fun setEnabled(profileId: Long, enabled: Boolean) = edit(profileId) { it.copy(enabled = enabled) }
+
+    /** Pause a profile until [untilMillis] (0 resumes it immediately). */
+    suspend fun setPausedUntil(profileId: Long, untilMillis: Long) = dao.setPausedUntilMillis(profileId, untilMillis)
 
     suspend fun setMode(profileId: Long, mode: BlockingMode) =
         edit(profileId) { it.copy(blockingMode = if (mode == BlockingMode.ALLOWLIST) 1 else 0) }

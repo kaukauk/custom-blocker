@@ -13,19 +13,22 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -65,6 +68,7 @@ fun ProfileListScreen(
     val lockInfo by viewModel.lockInfo.collectAsStateWithLifecycle()
     var showUnlock by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<ProfileRow?>(null) }
+    var customPauseFor by remember { mutableStateOf<Long?>(null) }
     val earnUnlock = com.customblocker.ui.strict.rememberEarnUnlockLauncher(lock.config)
 
     if (showUnlock) {
@@ -117,20 +121,35 @@ fun ProfileListScreen(
             }
             items(profiles, key = { it.id }) { profile ->
                 val pLocked = lockInfo.locked(profile.id)
+                // Active profiles get a primary outline; an exhausted limit makes the whole card
+                // turn red (filled + thicker border) so "no time left" really stands out.
+                val outline = when {
+                    profile.limitExceeded -> MaterialTheme.colorScheme.error
+                    profile.active -> MaterialTheme.colorScheme.primary
+                    else -> null
+                }
+                val cardColors = if (profile.limitExceeded) {
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                } else {
+                    CardDefaults.cardColors()
+                }
                 val cardModifier = Modifier.fillMaxWidth()
                     .then(
-                        if (profile.limitExceeded) {
+                        if (outline != null) {
                             Modifier.border(
-                                width = 2.dp,
-                                color = MaterialTheme.colorScheme.error,
+                                width = if (profile.limitExceeded) 3.dp else 2.dp,
+                                color = outline,
                                 shape = CardDefaults.shape,
                             )
                         } else Modifier,
                     )
                     .clickable { onOpenProfile(profile.id) }
-                Card(cardModifier) {
+                Card(cardModifier, colors = cardColors) {
                     Row(
-                        Modifier.fillMaxWidth().padding(16.dp),
+                        Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, bottom = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -141,17 +160,39 @@ fun ProfileListScreen(
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
-                        Switch(
-                            checked = profile.enabled,
-                            // Can enable a profile while locked, but not disable it.
-                            onCheckedChange = { viewModel.setEnabled(profile.id, it) },
-                            enabled = !(pLocked && profile.enabled),
-                        )
-                        IconButton(
-                            onClick = { pendingDelete = profile },
-                            enabled = !pLocked,
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete profile")
+                        var menuOpen by remember { mutableStateOf(false) }
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            if (profile.paused) {
+                                DropdownMenuItem(
+                                    text = { Text("Resume now") },
+                                    onClick = { menuOpen = false; viewModel.resumeProfile(profile.id) },
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text("Pause 15 minutes") },
+                                    enabled = !pLocked,
+                                    onClick = { menuOpen = false; viewModel.pauseProfile(profile.id, 15 * 60_000L) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Pause 1 hour") },
+                                    enabled = !pLocked,
+                                    onClick = { menuOpen = false; viewModel.pauseProfile(profile.id, 60 * 60_000L) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Pause for…") },
+                                    enabled = !pLocked,
+                                    onClick = { menuOpen = false; customPauseFor = profile.id },
+                                )
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Delete profile", color = MaterialTheme.colorScheme.error) },
+                                enabled = !pLocked,
+                                onClick = { menuOpen = false; pendingDelete = profile },
+                            )
                         }
                     }
                 }
@@ -162,15 +203,48 @@ fun ProfileListScreen(
     pendingDelete?.let { profile ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Delete profile?") },
-            text = { Text("\"${profile.title}\" and its apps, websites and conditions will be permanently removed.") },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Delete \"${profile.title}\"?") },
+            text = {
+                Text(
+                    "This permanently deletes the profile and all of its apps, websites and " +
+                        "conditions. This cannot be undone.",
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteProfile(profile.id)
                     pendingDelete = null
-                }) { Text("Delete") }
+                }) { Text("Delete forever", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
+        )
+    }
+
+    customPauseFor?.let { profileId ->
+        var minutes by remember { mutableStateOf("30") }
+        AlertDialog(
+            onDismissRequest = { customPauseFor = null },
+            title = { Text("Pause for…") },
+            text = {
+                OutlinedTextField(
+                    value = minutes,
+                    onValueChange = { minutes = it.filter(Char::isDigit).take(4) },
+                    label = { Text("Minutes") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        minutes.toIntOrNull()?.takeIf { it > 0 }?.let {
+                            viewModel.pauseProfile(profileId, it * 60_000L)
+                        }
+                        customPauseFor = null
+                    },
+                ) { Text("Pause") }
+            },
+            dismissButton = { TextButton(onClick = { customPauseFor = null }) { Text("Cancel") } },
         )
     }
 

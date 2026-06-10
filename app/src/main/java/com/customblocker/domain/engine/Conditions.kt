@@ -73,6 +73,8 @@ data class ProfileRule(
     val blockLaunch: Boolean = true,
     /** Suppress notifications from targeted apps while active. */
     val blockNotifications: Boolean = false,
+    /** Temporarily inactive until this wall-clock instant (0 = not paused). */
+    val pausedUntilMillis: Long = 0,
 ) {
     /** Whether this profile's mode + app set targets [packageName]. */
     fun targets(packageName: String): Boolean = when (mode) {
@@ -92,6 +94,8 @@ data class BlockContext(
     val usageUsedSeconds: Map<Long, Int> = emptyMap(),
     /** Launch count this period, keyed by profile id. */
     val launchCounts: Map<Long, Int> = emptyMap(),
+    /** Wall-clock now, for comparing against a profile's pause deadline. */
+    val nowMillis: Long = 0,
 )
 
 object ConditionEvaluator {
@@ -99,6 +103,7 @@ object ConditionEvaluator {
     /** True if every enabled condition of [rule] is satisfied by [ctx]. */
     fun isActive(rule: ProfileRule, ctx: BlockContext): Boolean {
         if (!rule.enabled) return false
+        if (rule.pausedUntilMillis > ctx.nowMillis) return false   // temporarily paused
         val m = rule.conditionsMask
 
         if (m and ConditionTypes.TIME != 0) {

@@ -30,6 +30,8 @@ data class ProfileEntity(
     val blockNotifications: Boolean = false,
     /** Automatically add newly-installed launchable apps to this profile's list. */
     val addNewApps: Boolean = false,
+    /** Temporarily inactive until this wall-clock instant (0 = not paused). Auto-resumes after. */
+    val pausedUntilMillis: Long = 0,
 )
 
 @Entity(

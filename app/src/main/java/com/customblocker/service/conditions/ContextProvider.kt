@@ -29,6 +29,7 @@ class ContextProvider @Inject constructor(
             insideGeofenceIds = geofences,
             usageUsedSeconds = used,
             launchCounts = launches,
+            nowMillis = System.currentTimeMillis(),
         )
     }
 

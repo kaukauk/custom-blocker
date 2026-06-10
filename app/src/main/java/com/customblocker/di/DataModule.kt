@@ -2,6 +2,8 @@ package com.customblocker.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.customblocker.data.db.BlockerDao
 import com.customblocker.data.db.BlockerDatabase
 import dagger.Module
@@ -15,12 +17,19 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DataModule {
 
+    /** v7→v8: add profiles.pausedUntilMillis (temporary per-profile pause). Preserves user data. */
+    private val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE profiles ADD COLUMN pausedUntilMillis INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): BlockerDatabase =
         Room.databaseBuilder(context, BlockerDatabase::class.java, "blocker.db")
-            // Dev convenience: schema still churning across phases. Replace with real
-            // migrations before any release with user data. (Room 2.6.x: no-arg form.)
+            .addMigrations(MIGRATION_7_8)
+            // Dev convenience backstop for older churn; real migrations are added per-version above.
             .fallbackToDestructiveMigration()
             .build()
 
