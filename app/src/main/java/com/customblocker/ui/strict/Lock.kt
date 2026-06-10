@@ -85,9 +85,17 @@ class LockViewModel @Inject constructor(
             LockUi(locked = locked, config = cfg, remainingMillis = remaining)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LockUi())
 
+    /**
+     * Passing the unlock gate turns Strict Mode genuinely OFF (not a temporary session unlock), so
+     * there's no confusing "enabled but unlocked" half-state. [unlock.relock] resets the in-memory
+     * flag so that simply re-enabling Strict Mode later locks again as expected.
+     */
     fun markUnlocked() {
-        unlock.markUnlocked()
-        viewModelScope.launch { store.clearPinEmergency() }   // consumed → reset for next time
+        unlock.relock()
+        viewModelScope.launch {
+            store.setEnabled(false)        // fully disable (also clears any TIMER deadline / PIN wait)
+            store.clearPinEmergency()
+        }
     }
     fun isCharging() = unlock.isCharging()
     suspend fun verifyPin(pin: String) = unlock.verifyPin(pin)

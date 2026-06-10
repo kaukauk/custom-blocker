@@ -57,12 +57,18 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
-import kotlin.math.cos
 
 /** Blue = the region where this profile is active ("blocked"). */
-private const val BLOCK_FILL = 0x553D5AFE
+private val BLOCK_FILL = 0x993D5AFE.toInt()
 private val BLOCK_LINE = 0xFF3D5AFE.toInt()
 private val BlockSwatch = Color(0xFF3D5AFE)
+
+/** Outer ring covering the whole map — for "blocked outside", with the circle cut out as a hole.
+ *  Covering everything means panning/zooming never reveals an edge. */
+private val WORLD_RING = listOf(
+    GeoPoint(85.0, -179.9), GeoPoint(85.0, 179.9),
+    GeoPoint(-85.0, 179.9), GeoPoint(-85.0, -179.9),
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,18 +100,24 @@ fun MapPickerScreen(
         val p = picked
         if (p == null) { mapView.invalidate(); return }
         mapView.overlays.add(
-            Marker(mapView).apply { position = p; title = placeName ?: "Location"; setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM) },
+            Marker(mapView).apply {
+                position = p
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                infoWindow = null                              // no pop-up bubble on tap
+                setOnMarkerClickListener { _, _ -> false }     // let the tap fall through to move the point
+            },
         )
         val circle = Polygon.pointsAsCircle(p, radius.toDouble())
         val poly = Polygon(mapView).apply {
             fillPaint.color = BLOCK_FILL
             outlinePaint.color = BLOCK_LINE
-        }
-        if (!inverted) {
-            poly.points = circle                       // blocked INSIDE the circle
-        } else {
-            poly.points = squareAround(p, maxOf(radius * 25.0, 8_000.0))  // blocked OUTSIDE…
-            poly.holes = listOf(circle)                                  // …with the circle cut out
+            setOnClickListener { _, _, _ -> false }            // taps pass through (move the point)
+            if (!inverted) {
+                points = circle                                // blocked INSIDE the circle
+            } else {
+                points = WORLD_RING                            // blocked OUTSIDE: cover the whole map…
+                holes = listOf(circle)                         // …with the circle cut out (clear)
+            }
         }
         mapView.overlays.add(poly)
         mapView.invalidate()
@@ -261,16 +273,4 @@ fun MapPickerScreen(
             }
         }
     }
-}
-
-/** A square of [halfMeters] half-side around [center] — the outer ring for the "blocked outside" fill. */
-private fun squareAround(center: GeoPoint, halfMeters: Double): List<GeoPoint> {
-    val dLat = halfMeters / 111_320.0
-    val dLng = halfMeters / (111_320.0 * cos(Math.toRadians(center.latitude)))
-    return listOf(
-        GeoPoint(center.latitude - dLat, center.longitude - dLng),
-        GeoPoint(center.latitude - dLat, center.longitude + dLng),
-        GeoPoint(center.latitude + dLat, center.longitude + dLng),
-        GeoPoint(center.latitude + dLat, center.longitude - dLng),
-    )
 }
