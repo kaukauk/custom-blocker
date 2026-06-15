@@ -6,20 +6,36 @@ import org.junit.Test
 
 class SettingsGuardTest {
 
-    @Test fun blocksSettings() {
-        assertTrue(SettingsGuard.shouldBlock("com.android.settings", "com.android.settings.homepage.SettingsHomepageActivity"))
-        assertTrue(SettingsGuard.shouldBlock("com.android.settings", "android.widget.FrameLayout"))
+    // The package installer + permission UI are blocked outright by the L3 guard.
+    @Test fun installer_isInstaller() {
+        assertTrue(SettingsGuard.isInstaller("com.android.packageinstaller"))
+        assertTrue(SettingsGuard.isInstaller("com.google.android.packageinstaller"))
+        assertTrue(SettingsGuard.isInstaller("com.android.permissioncontroller"))
     }
 
-    @Test fun blocksPackageInstallerAndPermissionUi() {
-        assertTrue(SettingsGuard.shouldBlock("com.android.packageinstaller", null))
-        assertTrue(SettingsGuard.shouldBlock("com.google.android.packageinstaller", null))
-        assertTrue(SettingsGuard.shouldBlock("com.android.permissioncontroller", null))
+    // Settings is guarded, but gated through the Allowed Settings launcher — not "installer"-blocked.
+    @Test fun settings_guardedButNotInstaller() {
+        assertTrue(SettingsGuard.SETTINGS_PKG in SettingsGuard.GUARDED_PACKAGES)
+        assertFalse(SettingsGuard.isInstaller(SettingsGuard.SETTINGS_PKG))
     }
 
-    @Test fun allowsEverythingElse() {
-        assertFalse(SettingsGuard.shouldBlock("com.android.chrome", null))
-        assertFalse(SettingsGuard.shouldBlock("com.android.systemui", null))
-        assertFalse(SettingsGuard.shouldBlock("com.google.android.apps.nexuslauncher", null))
+    @Test fun otherApps_notGuarded() {
+        assertFalse("com.android.chrome" in SettingsGuard.GUARDED_PACKAGES)
+        assertFalse(SettingsGuard.isInstaller("com.android.chrome"))
+        assertFalse(SettingsGuard.isInstaller("com.google.android.apps.nexuslauncher"))
+    }
+
+    // Tamper surfaces eject the user even while a Settings permit is held; innocuous screens don't.
+    @Test fun dangerousScreens_detected() {
+        assertTrue(SettingsGuard.isDangerous(listOf("Accessibility")))
+        assertTrue(SettingsGuard.isDangerous(listOf("App info")))
+        assertTrue(SettingsGuard.isDangerous(listOf("Device admin apps")))
+        assertTrue(SettingsGuard.isDangerous(listOf("Security")))
+    }
+
+    @Test fun safeScreens_allowed() {
+        assertFalse(SettingsGuard.isDangerous(listOf("Wi-Fi")))
+        assertFalse(SettingsGuard.isDangerous(listOf("Bluetooth")))
+        assertFalse(SettingsGuard.isDangerous(emptyList()))
     }
 }

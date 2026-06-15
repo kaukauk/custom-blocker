@@ -63,6 +63,23 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Screen on/off. We only count foreground time while the screen is on: [SystemClock.elapsedRealtime]
+     * keeps advancing through sleep/Doze, so without this the whole screen-off gap would be banked in
+     * one lump the moment the device wakes. On SCREEN_OFF we bank the time up to now and stop counting;
+     * on SCREEN_ON we restart the clock from now so the asleep period is never credited.
+     */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: android.content.Intent?) {
+            when (i?.action) {
+                Intent.ACTION_SCREEN_OFF -> { accrueUsage(); screenOn = false }
+                // Reset the clock BEFORE re-enabling accrual so a ticker tick that races the wake-up
+                // can't bank the sleep gap (it sees screenOn = false and skips).
+                Intent.ACTION_SCREEN_ON -> { sinceMs = SystemClock.elapsedRealtime(); screenOn = true }
+            }
+        }
+    }
+
     @Volatile private var strictConfig: StrictModeConfig = StrictModeConfig()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -80,6 +97,8 @@ class BlockerAccessibilityService : AccessibilityService() {
      */
     @Volatile private var transientOverlays: Set<String> = setOf(SYSTEM_UI_PKG)
     private var sinceMs: Long = 0
+    /** Whether the screen is on; usage only accrues while it is (see [screenReceiver]). */
+    @Volatile private var screenOn: Boolean = true
     /** Last URL we evaluated, to skip re-evaluating unchanged content-changed spam. */
     private var lastUrl: String? = null
     /** Package we last recorded a block for, to avoid re-counting the 3s ticker re-evaluations. */
@@ -94,6 +113,15 @@ class BlockerAccessibilityService : AccessibilityService() {
         registerReceiver(
             reevalReceiver,
             IntentFilter(TimeBoundaryScheduler.ACTION_REEVAL),
+            Context.RECEIVER_NOT_EXPORTED,
+        )
+        screenOn = powerManager.isInteractive
+        registerReceiver(
+            screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            },
             Context.RECEIVER_NOT_EXPORTED,
         )
         L.d(L.FG, "accessibility service connected")
@@ -199,6 +227,7 @@ class BlockerAccessibilityService : AccessibilityService() {
 
     private fun accrueUsage() {
         val pkg = trackedPkg ?: return
+        if (!screenOn) return   // don't bank time while the screen is off — elapsedRealtime spans sleep
         val now = SystemClock.elapsedRealtime()
         val seconds = ((now - sinceMs) / 1000L).toInt()
         if (seconds > 0) {
@@ -328,6 +357,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         scope.cancel()
         overlay.hide()
         runCatching { unregisterReceiver(reevalReceiver) }
+        runCatching { unregisterReceiver(screenReceiver) }
         L.w(L.FG, "accessibility service destroyed")
     }
 

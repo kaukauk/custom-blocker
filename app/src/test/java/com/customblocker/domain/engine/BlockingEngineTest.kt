@@ -33,9 +33,11 @@ class BlockingEngineTest {
         launch: LaunchLimitSpec? = null,
         blockLaunch: Boolean = true,
         blockNotifications: Boolean = false,
+        batchNotifications: Boolean = false,
     ) = ProfileRule(
         1, "Test", enabled, mode, apps, mask, dayFlags, windows, ssids, fences, usage, launch,
         blockLaunch = blockLaunch, blockNotifications = blockNotifications,
+        batchNotifications = batchNotifications,
     )
 
     private fun blocked(d: BlockDecision) = d is BlockDecision.Block
@@ -171,9 +173,11 @@ class BlockingEngineTest {
         assertTrue(blocked(e.decide(CHROME, ctx(charging = true))))
     }
 
-    @Test fun blockLaunchOff_doesNotEject() {
+    // Launch-blocking is core behaviour, applied for any active targeting profile — the engine does
+    // not consult the (currently unused) blockLaunch flag, so an active profile still ejects.
+    @Test fun activeProfile_ejectsRegardlessOfBlockLaunchFlag() {
         val r = rule(blockLaunch = false)
-        assertEquals(BlockDecision.Allow, engine(r).decide(CHROME, ctx()))
+        assertTrue(blocked(engine(r).decide(CHROME, ctx())))
     }
 
     @Test fun notifications_suppressedOnlyWhenFlagAndActiveAndTargeted() {
@@ -186,6 +190,30 @@ class BlockingEngineTest {
 
     @Test fun notifications_offByDefault() {
         assertEquals(false, engine(rule()).shouldBlockNotification(CHROME, ctx()))
+    }
+
+    // A batch profile gated by an event condition (charger/location) has no fixed release time, but
+    // its notifications must be HELD (re-checked later), not dropped — otherwise they're lost.
+    @Test fun batchNotifications_eventGated_heldNotDropped() {
+        val r = rule(mask = ConditionTypes.CHARGER, blockNotifications = true, batchNotifications = true)
+        val action = engine(r).notificationAction(CHROME, ctx(charging = true), dayStartHour = 0)
+        assertTrue(action is NotificationAction.Batch)
+    }
+
+    // An always-on batch profile can never go inactive → nothing to release at → hide.
+    @Test fun batchNotifications_alwaysOn_hides() {
+        val r = rule(blockNotifications = true, batchNotifications = true)
+        assertEquals(NotificationAction.Hide, engine(r).notificationAction(CHROME, ctx(), dayStartHour = 0))
+    }
+
+    // A schedule (time-bounded) batch profile still releases at the window boundary, not dropped.
+    @Test fun batchNotifications_timeBounded_batches() {
+        val r = rule(
+            mask = ConditionTypes.TIME, windows = listOf(TimeWindow(9 * 60, 17 * 60)),
+            blockNotifications = true, batchNotifications = true,
+        )
+        val action = engine(r).notificationAction(CHROME, ctx(minute = 10 * 60), dayStartHour = 0)
+        assertTrue(action is NotificationAction.Batch)
     }
 
     @Test fun allowsNullOrBlank() {

@@ -54,6 +54,7 @@ class UsageTracker @Inject constructor(
             usagePeriod[c.profileId] = c.usagePeriodKey
             launchPeriod[c.profileId] = c.launchPeriodKey
         }
+        resetStalePeriods()
         publish()
     }
 
@@ -93,12 +94,23 @@ class UsageTracker @Inject constructor(
 
     /** Current (usedSeconds, launchCounts) maps for the engine context, with stale periods reset. */
     fun snapshot(): Pair<Map<Long, Int>, Map<Long, Int>> {
-        engine.profiles.forEach { rule ->
-            rule.usageLimit?.let { resetIfNeeded(rule.id, usagePeriod, usedSeconds, periodIndex(it.period)) }
-            rule.launchLimit?.let { resetIfNeeded(rule.id, launchPeriod, launches, periodIndex(it.period)) }
-        }
+        resetStalePeriods()
         publish()
         return usedSeconds.toMap() to launches.toMap()
+    }
+
+    /**
+     * Reset every current profile's counter whose period has rolled over, independent of app use, so
+     * a limit's allowance returns to zero exactly at the hour/day boundary even while paused or idle.
+     * Persists each reset so it survives process death (otherwise the stale value would be reloaded).
+     */
+    private fun resetStalePeriods() {
+        engine.profiles.forEach { rule ->
+            var reset = false
+            rule.usageLimit?.let { if (resetIfNeeded(rule.id, usagePeriod, usedSeconds, periodIndex(it.period))) reset = true }
+            rule.launchLimit?.let { if (resetIfNeeded(rule.id, launchPeriod, launches, periodIndex(it.period))) reset = true }
+            if (reset) persist(rule.id)
+        }
     }
 
     /** Write the current counters for [id] through to Room (fire-and-forget). */
@@ -110,16 +122,19 @@ class UsageTracker @Inject constructor(
         scope.launch { repository.saveUsageCounter(id, used, launchCount, usageKey, launchKey) }
     }
 
+    /** Zero [id]'s counter if its period has rolled over; returns true if it actually reset. */
     private fun resetIfNeeded(
         id: Long,
         periodMap: ConcurrentHashMap<Long, Long>,
         valueMap: ConcurrentHashMap<Long, Int>,
         currentPeriod: Long,
-    ) {
+    ): Boolean {
         if (periodMap[id] != currentPeriod) {
             valueMap[id] = 0
             periodMap[id] = currentPeriod
+            return true
         }
+        return false
     }
 
     private fun periodIndex(period: LimitPeriod): Long = when (period) {

@@ -113,11 +113,34 @@ class BlockingEngine @Inject constructor() {
         }
         if (matching.isEmpty()) return NotificationAction.Allow
         if (matching.any { !it.batchNotifications }) return NotificationAction.Hide
-        // All matching profiles batch: hold until the soonest stops restricting. If none of them is
-        // time-bounded (e.g. an always-on block list), we can't hold forever → hide instead.
-        val until = matching.mapNotNull { deactivationMillis(it, ctx, dayStartHour) }.minOrNull()
-            ?: return NotificationAction.Hide
+        // All matching profiles batch: hold until the soonest moment one could stop restricting, then
+        // let the OS re-deliver. If it's still blocked then it's simply re-held — self-correcting.
+        val timeRelease = matching.mapNotNull { deactivationMillis(it, ctx, dayStartHour) }.minOrNull()
+        // A profile gated by charger / location / Wi-Fi stops at an unpredictable moment (you unplug,
+        // you leave the area) — there's no fixed time to release at. Rather than drop the notification
+        // (the old behaviour), re-check on a fixed cadence so it surfaces shortly after the profile
+        // goes inactive. Held notifications then come back instead of being lost.
+        val eventGated = matching.any {
+            it.conditionsMask and (ConditionTypes.CHARGER or ConditionTypes.LOCATION or ConditionTypes.WIFI) != 0
+        }
+        val until = when {
+            eventGated -> minOf(timeRelease ?: Long.MAX_VALUE, ctx.nowMillis + NOTIFICATION_RECHECK_MS)
+            // Purely time-bounded (schedule / usage / launch limit): release exactly at the boundary.
+            timeRelease != null -> timeRelease
+            // No condition can ever stop restricting (e.g. an always-on block list) → nothing to
+            // release at, so holding forever is pointless: hide.
+            else -> return NotificationAction.Hide
+        }
         return NotificationAction.Batch(until)
+    }
+
+    private companion object {
+        /**
+         * Re-check cadence for a held notification whose profile stops at an unpredictable time
+         * (charger / location / Wi-Fi). The OS re-delivers it this often; once the profile is inactive
+         * it's released, otherwise it's re-held. Trades a little release latency for not dropping it.
+         */
+        const val NOTIFICATION_RECHECK_MS = 15 * 60_000L
     }
 
     /** Soonest wall-clock instant [rule] (currently active) stops restricting, from time conditions. */
