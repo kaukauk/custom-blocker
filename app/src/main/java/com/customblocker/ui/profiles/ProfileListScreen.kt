@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -60,6 +61,7 @@ fun ProfileListScreen(
     onOpenStrictMode: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenNotifications: () -> Unit,
     viewModel: ProfileListViewModel = hiltViewModel(),
     lockViewModel: LockViewModel = hiltViewModel(),
 ) {
@@ -89,6 +91,9 @@ fun ProfileListScreen(
             TopAppBar(
                 title = { Text("Custom Blocker") },
                 actions = {
+                    IconButton(onClick = onOpenNotifications) {
+                        Icon(Icons.Default.Notifications, contentDescription = "Notifications")
+                    }
                     IconButton(onClick = onOpenStats) {
                         Icon(Icons.Default.BarChart, contentDescription = "Statistics")
                     }

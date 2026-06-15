@@ -159,6 +159,64 @@ data class WebsiteEntity(
     val enabled: Boolean = true,
 )
 
+/**
+ * A notification filter (PLAN.md §4b): independent of blocking profiles. Matches posted
+ * notifications by app + an optional regex over the title/text, and applies an action while a
+ * daily schedule is active. [packagesCsv] is a comma-separated package list (empty = any app);
+ * [releaseTimesCsv] is a comma-separated list of minute-of-day release points used by DELAY.
+ */
+@Entity(tableName = "notif_filters")
+data class NotifFilterEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String = "",
+    val enabled: Boolean = true,
+    /** Comma-separated package names to match; empty = any app. */
+    val packagesCsv: String = "",
+    /** Regex over the chosen target; blank = match every notification from the apps. */
+    val regexPattern: String = "",
+    /** 0 = TITLE, 1 = CONTENT, 2 = EITHER, 3 = BOTH (NotifMatchTarget.ordinal). */
+    val regexTarget: Int = 2,
+    /** Second regex (matched against the content) when [regexTarget] is BOTH. */
+    val secondaryPattern: String = "",
+    /** 0 = DISMISS, 1 = CATCH, 2 = BATCH, 3 = DELAY (NotifActionType.ordinal). */
+    val action: Int = 0,
+    /** BATCH: release cadence in minutes, aligned to midnight. */
+    val batchIntervalMinutes: Int = 60,
+    /** DELAY: comma-separated minute-of-day release points. */
+    val releaseTimesCsv: String = "",
+    /** Capture-window start (minute of day, inclusive). 0 = midnight. */
+    val startMinute: Int = 0,
+    /** Capture-window end (minute of day, inclusive). 1439 = 23:59. Wraps if end < start. */
+    val endMinute: Int = 1439,
+    /** Day-of-week bitmask (DayFlags.*) the schedule applies on. */
+    val dayFlags: Int = 127,
+    /** Lower wins when several filters match the same notification. */
+    val priority: Int = 0,
+    /** How many notifications this filter has acted on (display only). */
+    val hits: Int = 0,
+)
+
+/**
+ * A captured notification for the in-app history/inbox. Every non-ongoing posted notification is
+ * logged here (capped, oldest-trimmed) so the user can review what came in and build filters from
+ * real examples. [filterId]/[actionApplied] record which filter (if any) acted and how.
+ */
+@Entity(
+    tableName = "captured_notifications",
+    indices = [Index("postedAtMillis")],
+)
+data class CapturedNotificationEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val packageName: String,
+    val title: String,
+    val text: String,
+    val postedAtMillis: Long,
+    /** The filter that acted on it, or null if it was only observed. */
+    val filterId: Long? = null,
+    /** Action applied: -1 = none/observed, else NotifActionType.ordinal. */
+    val actionApplied: Int = -1,
+)
+
 @Entity(
     tableName = "geo_addresses",
     foreignKeys = [

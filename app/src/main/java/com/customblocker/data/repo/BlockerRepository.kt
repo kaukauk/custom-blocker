@@ -2,7 +2,9 @@ package com.customblocker.data.repo
 
 import com.customblocker.data.db.AppStat
 import com.customblocker.data.db.BlockerDao
+import com.customblocker.data.db.CapturedNotificationEntity
 import com.customblocker.data.db.GeoAddressEntity
+import com.customblocker.data.db.NotifFilterEntity
 import com.customblocker.data.db.ProfileAppEntity
 import com.customblocker.data.db.ProfileEntity
 import com.customblocker.data.db.TimeIntervalEntity
@@ -14,6 +16,9 @@ import com.customblocker.domain.engine.BlockingMode
 import com.customblocker.domain.engine.GeofenceSpec
 import com.customblocker.domain.engine.LaunchLimitSpec
 import com.customblocker.domain.engine.LimitPeriod
+import com.customblocker.domain.engine.NotifActionType
+import com.customblocker.domain.engine.NotifFilterRule
+import com.customblocker.domain.engine.NotifMatchTarget
 import com.customblocker.domain.engine.ProfileRule
 import com.customblocker.domain.engine.TimeWindow
 import com.customblocker.domain.engine.UrlMatchType
@@ -25,6 +30,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -245,8 +251,61 @@ class BlockerRepository @Inject constructor(
 
     suspend fun clearLaunchLimit(profileId: Long) = dao.removeUsageLimit(profileId, LIMIT_LAUNCH)
 
+    // --- notification filters (PLAN.md §4b) ---
+    /** Engine-facing stream: DB rows mapped to [NotifFilterRule]. */
+    fun notifFilterRules(): Flow<List<NotifFilterRule>> =
+        dao.observeNotifFilters().map { rows -> rows.map { it.toRule() } }
+
+    fun observeNotifFilters(): Flow<List<NotifFilterEntity>> = dao.observeNotifFilters()
+
+    fun observeNotifFilter(id: Long): Flow<NotifFilterEntity?> = dao.observeNotifFilter(id)
+
+    suspend fun getNotifFilter(id: Long): NotifFilterEntity? = dao.getNotifFilter(id)
+
+    suspend fun upsertNotifFilter(filter: NotifFilterEntity): Long = dao.upsertNotifFilter(filter)
+
+    suspend fun setNotifFilterEnabled(id: Long, enabled: Boolean) = dao.setNotifFilterEnabled(id, enabled)
+
+    suspend fun deleteNotifFilter(id: Long) = dao.deleteNotifFilter(id)
+
+    // --- captured notifications (history / inbox) ---
+    fun observeCaptured(): Flow<List<CapturedNotificationEntity>> = dao.observeCaptured()
+
+    suspend fun recentCaptured(limit: Int): List<CapturedNotificationEntity> = dao.recentCaptured(limit)
+
+    /** Append a captured notification, then trim the oldest beyond [CAPTURED_CAP]. */
+    suspend fun logCaptured(notification: CapturedNotificationEntity) {
+        dao.insertCaptured(notification)
+        if (dao.capturedCount() > CAPTURED_CAP) dao.trimCaptured(CAPTURED_CAP)
+    }
+
+    suspend fun incrementFilterHit(id: Long) = dao.incrementFilterHit(id)
+
+    suspend fun deleteCaptured(id: Long) = dao.deleteCaptured(id)
+
+    suspend fun clearCaptured() = dao.clearCaptured()
+
+    private fun NotifFilterEntity.toRule() = NotifFilterRule(
+        id = id,
+        title = title,
+        enabled = enabled,
+        packages = packagesCsv.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
+        regexPattern = regexPattern,
+        target = NotifMatchTarget.entries.getOrElse(regexTarget) { NotifMatchTarget.EITHER },
+        secondaryPattern = secondaryPattern,
+        action = NotifActionType.entries.getOrElse(action) { NotifActionType.DISMISS },
+        batchIntervalMinutes = batchIntervalMinutes,
+        releaseTimes = releaseTimesCsv.split(',').mapNotNull { it.trim().toIntOrNull() },
+        startMinute = startMinute,
+        endMinute = endMinute,
+        dayFlags = dayFlags,
+        priority = priority,
+    )
+
     companion object {
         const val LIMIT_USAGE = 0
         const val LIMIT_LAUNCH = 1
+        /** Max captured notifications kept for the in-app history. */
+        const val CAPTURED_CAP = 200
     }
 }

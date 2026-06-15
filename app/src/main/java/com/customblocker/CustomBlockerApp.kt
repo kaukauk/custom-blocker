@@ -2,6 +2,7 @@ package com.customblocker
 
 import android.app.Application
 import com.customblocker.domain.engine.EngineSync
+import com.customblocker.domain.engine.NotifFilterSync
 import com.customblocker.service.conditions.SignalsCoordinator
 import com.customblocker.service.conditions.UsageTracker
 import com.customblocker.service.monitoring.WatchdogWorker
@@ -18,6 +19,7 @@ class CustomBlockerApp : Application() {
     @InstallIn(SingletonComponent::class)
     interface AppEntryPoint {
         fun engineSync(): EngineSync
+        fun notifFilterSync(): NotifFilterSync
         fun signalsCoordinator(): SignalsCoordinator
         fun usageTracker(): UsageTracker
     }
@@ -32,6 +34,7 @@ class CustomBlockerApp : Application() {
         entry.usageTracker().load()
         entry.signalsCoordinator().start()
         entry.engineSync().start()
+        entry.notifFilterSync().start()
 
         // Reliability watchdog: periodically verify the accessibility service is still enabled.
         WatchdogWorker.schedule(this)

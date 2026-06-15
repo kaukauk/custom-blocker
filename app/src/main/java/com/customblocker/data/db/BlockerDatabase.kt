@@ -14,8 +14,10 @@ import androidx.room.RoomDatabase
         WebsiteEntity::class,
         UsageCounterEntity::class,
         DailyStatEntity::class,
+        NotifFilterEntity::class,
+        CapturedNotificationEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = false,
 )
 abstract class BlockerDatabase : RoomDatabase() {

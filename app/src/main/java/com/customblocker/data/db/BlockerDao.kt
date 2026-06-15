@@ -145,6 +145,54 @@ interface BlockerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertUsageCounter(counter: UsageCounterEntity)
 
+    // --- notification filters ---
+    @Query("SELECT * FROM notif_filters ORDER BY priority, id")
+    fun observeNotifFilters(): Flow<List<NotifFilterEntity>>
+
+    @Query("SELECT * FROM notif_filters WHERE id = :id")
+    fun observeNotifFilter(id: Long): Flow<NotifFilterEntity?>
+
+    @Query("SELECT * FROM notif_filters WHERE id = :id")
+    suspend fun getNotifFilter(id: Long): NotifFilterEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertNotifFilter(filter: NotifFilterEntity): Long
+
+    @Query("UPDATE notif_filters SET enabled = :enabled WHERE id = :id")
+    suspend fun setNotifFilterEnabled(id: Long, enabled: Boolean)
+
+    @Query("UPDATE notif_filters SET hits = hits + 1 WHERE id = :id")
+    suspend fun incrementFilterHit(id: Long)
+
+    @Query("DELETE FROM notif_filters WHERE id = :id")
+    suspend fun deleteNotifFilter(id: Long)
+
+    // --- captured notifications (history / inbox) ---
+    @Query("SELECT * FROM captured_notifications ORDER BY postedAtMillis DESC")
+    fun observeCaptured(): Flow<List<CapturedNotificationEntity>>
+
+    @Query("SELECT * FROM captured_notifications ORDER BY postedAtMillis DESC LIMIT :limit")
+    suspend fun recentCaptured(limit: Int): List<CapturedNotificationEntity>
+
+    @Insert
+    suspend fun insertCaptured(notification: CapturedNotificationEntity)
+
+    @Query("SELECT COUNT(*) FROM captured_notifications")
+    suspend fun capturedCount(): Int
+
+    /** Delete all but the [keep] most-recent rows (oldest-first trim). */
+    @Query(
+        "DELETE FROM captured_notifications WHERE id NOT IN " +
+            "(SELECT id FROM captured_notifications ORDER BY postedAtMillis DESC LIMIT :keep)",
+    )
+    suspend fun trimCaptured(keep: Int)
+
+    @Query("DELETE FROM captured_notifications WHERE id = :id")
+    suspend fun deleteCaptured(id: Long)
+
+    @Query("DELETE FROM captured_notifications")
+    suspend fun clearCaptured()
+
     // --- geofences ---
     @Query("SELECT * FROM geo_addresses")
     fun observeAllGeo(): Flow<List<GeoAddressEntity>>
