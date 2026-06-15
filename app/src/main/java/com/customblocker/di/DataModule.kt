@@ -82,11 +82,56 @@ object DataModule {
         }
     }
 
+    /**
+     * v11→v12: drop the now-removed profiles.blockLaunch column (app blocking always ejects, so the
+     * flag was dead config). SQLite can't drop a column in place pre-3.35 reliably across devices, so
+     * recreate the table without it and copy data. FK children reference "profiles" by name, so the
+     * drop-and-rename keeps them valid.
+     */
+    private val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE profiles_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    title TEXT NOT NULL,
+                    enabled INTEGER NOT NULL,
+                    blockingMode INTEGER NOT NULL,
+                    conditionsMask INTEGER NOT NULL,
+                    dayFlags INTEGER NOT NULL,
+                    blockUnsupportedBrowsers INTEGER NOT NULL,
+                    chargerInverted INTEGER NOT NULL,
+                    blockNotifications INTEGER NOT NULL,
+                    batchNotifications INTEGER NOT NULL,
+                    addNewApps INTEGER NOT NULL,
+                    pausedUntilMillis INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                INSERT INTO profiles_new (
+                    id, title, enabled, blockingMode, conditionsMask, dayFlags,
+                    blockUnsupportedBrowsers, chargerInverted, blockNotifications,
+                    batchNotifications, addNewApps, pausedUntilMillis
+                )
+                SELECT
+                    id, title, enabled, blockingMode, conditionsMask, dayFlags,
+                    blockUnsupportedBrowsers, chargerInverted, blockNotifications,
+                    batchNotifications, addNewApps, pausedUntilMillis
+                FROM profiles
+                """.trimIndent(),
+            )
+            db.execSQL("DROP TABLE profiles")
+            db.execSQL("ALTER TABLE profiles_new RENAME TO profiles")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): BlockerDatabase =
         Room.databaseBuilder(context, BlockerDatabase::class.java, "blocker.db")
-            .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+            .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
             // Dev convenience backstop for older churn; real migrations are added per-version above.
             .fallbackToDestructiveMigration()
             .build()

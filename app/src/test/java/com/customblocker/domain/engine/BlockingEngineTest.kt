@@ -31,12 +31,11 @@ class BlockingEngineTest {
         fences: List<GeofenceSpec> = emptyList(),
         usage: UsageLimitSpec? = null,
         launch: LaunchLimitSpec? = null,
-        blockLaunch: Boolean = true,
         blockNotifications: Boolean = false,
         batchNotifications: Boolean = false,
     ) = ProfileRule(
         1, "Test", enabled, mode, apps, mask, dayFlags, windows, ssids, fences, usage, launch,
-        blockLaunch = blockLaunch, blockNotifications = blockNotifications,
+        blockNotifications = blockNotifications,
         batchNotifications = batchNotifications,
     )
 
@@ -173,15 +172,14 @@ class BlockingEngineTest {
         assertTrue(blocked(e.decide(CHROME, ctx(charging = true))))
     }
 
-    // Launch-blocking is core behaviour, applied for any active targeting profile — the engine does
-    // not consult the (currently unused) blockLaunch flag, so an active profile still ejects.
-    @Test fun activeProfile_ejectsRegardlessOfBlockLaunchFlag() {
-        val r = rule(blockLaunch = false)
+    // Launch-blocking is core behaviour: any active targeting profile ejects the user.
+    @Test fun activeProfile_ejects() {
+        val r = rule()
         assertTrue(blocked(engine(r).decide(CHROME, ctx())))
     }
 
     @Test fun notifications_suppressedOnlyWhenFlagAndActiveAndTargeted() {
-        val r = rule(mask = ConditionTypes.CHARGER, blockLaunch = false, blockNotifications = true)
+        val r = rule(mask = ConditionTypes.CHARGER, blockNotifications = true)
         val e = engine(r)
         assertTrue(e.shouldBlockNotification(CHROME, ctx(charging = true)))      // targeted + active
         assertEquals(false, e.shouldBlockNotification(CHROME, ctx(charging = false))) // inactive

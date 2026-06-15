@@ -47,6 +47,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.customblocker.domain.engine.DayFlags
 import com.customblocker.domain.engine.NotifActionType
 import com.customblocker.domain.engine.NotifMatchTarget
+import com.customblocker.domain.engine.NotifSample
+import com.customblocker.domain.engine.NotificationPatternSuggester
 import com.customblocker.ui.components.NumberWheel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -152,6 +154,35 @@ fun FilterEditScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // --- Suggestions (mined from this app's recent notifications) ---
+            val suggestions = remember(packages, samples, viewModel.focus) {
+                packages.flatMap { pkg ->
+                    NotificationPatternSuggester.suggest(
+                        samples = samples,
+                        packageName = pkg,
+                        focus = viewModel.focus?.takeIf { it.packageName == pkg },
+                    )
+                }.distinctBy { it.target to it.phrase }
+                    .sortedByDescending { it.matchCount }
+                    .take(6)
+            }
+            if (suggestions.isNotEmpty()) {
+                SectionLabel("Suggested patterns")
+                Text(
+                    "Tap one to block similar notifications.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    suggestions.forEach { s ->
+                        AssistChip(
+                            onClick = { pattern = s.regex; target = s.target },
+                            label = { Text("\"${s.phrase}\" (${s.matchCount}×)") },
+                        )
+                    }
+                }
+            }
 
             // --- Matching ---
             SectionLabel("Match by")
@@ -314,7 +345,7 @@ private fun PatternPreview(
     secondary: String,
     target: NotifMatchTarget,
     packages: Set<String>,
-    samples: List<CapturedSample>,
+    samples: List<NotifSample>,
 ) {
     val pool = remember(packages, samples) {
         if (packages.isEmpty()) samples else samples.filter { it.packageName in packages }

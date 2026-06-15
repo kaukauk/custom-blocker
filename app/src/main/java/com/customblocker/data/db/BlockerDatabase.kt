@@ -17,7 +17,7 @@ import androidx.room.RoomDatabase
         NotifFilterEntity::class,
         CapturedNotificationEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = false,
 )
 abstract class BlockerDatabase : RoomDatabase() {

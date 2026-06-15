@@ -24,8 +24,6 @@ data class ProfileEntity(
     val dayFlags: Int = 127,
     /** Block the whole browser when its URL can't be read (PLAN.md §10). */
     val blockUnsupportedBrowsers: Boolean = false,
-    /** Eject the user when a targeted app is launched/foregrounded. */
-    val blockLaunch: Boolean = true,
     /** CHARGER condition sense: false = active while charging, true = active while NOT charging. */
     val chargerInverted: Boolean = false,
     /** Suppress notifications from targeted apps while this profile is active. */

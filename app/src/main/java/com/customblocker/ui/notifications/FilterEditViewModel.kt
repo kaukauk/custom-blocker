@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.customblocker.data.db.NotifFilterEntity
 import com.customblocker.data.repo.BlockerRepository
+import com.customblocker.domain.engine.NotifSample
 import com.customblocker.ui.AppLister
 import com.customblocker.ui.InstalledApp
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,9 +41,12 @@ class FilterEditViewModel @Inject constructor(
 
     private val filterId: Long = savedStateHandle.get<Long>("filterId") ?: 0L
     private val prefillPkg: String? = savedStateHandle.get<String>("pkg")?.takeIf { it.isNotBlank() }
-    private val prefillPattern: String? = savedStateHandle.get<String>("pattern")?.takeIf { it.isNotBlank() }
+    private val focusText: String? = savedStateHandle.get<String>("focus")?.takeIf { it.isNotBlank() }
 
     val isNew: Boolean get() = filterId == 0L
+
+    /** The notification the user tapped to start this filter (if any), used to focus suggestions. */
+    val focus: NotifSample? = prefillPkg?.let { NotifSample(it, "", focusText.orEmpty()) }
 
     private val _form = MutableStateFlow<FilterForm?>(null)
     /** Null until loaded; the screen seeds its editable state from the first non-null value. */
@@ -51,21 +55,18 @@ class FilterEditViewModel @Inject constructor(
     private val _apps = MutableStateFlow<List<InstalledApp>>(emptyList())
     val apps: StateFlow<List<InstalledApp>> = _apps.asStateFlow()
 
-    /** Recent captured notifications, used to preview how many a pattern would match. */
-    private val _samples = MutableStateFlow<List<CapturedSample>>(emptyList())
-    val samples: StateFlow<List<CapturedSample>> = _samples.asStateFlow()
+    /** Recent captured notifications, used for the live preview and pattern suggestions. */
+    private val _samples = MutableStateFlow<List<NotifSample>>(emptyList())
+    val samples: StateFlow<List<NotifSample>> = _samples.asStateFlow()
 
     init {
         viewModelScope.launch { _apps.value = lister.launchableApps() }
         viewModelScope.launch {
-            _samples.value = repository.recentCaptured(200).map { CapturedSample(it.packageName, it.title, it.text) }
+            _samples.value = repository.recentCaptured(200).map { NotifSample(it.packageName, it.title, it.text) }
         }
         viewModelScope.launch {
             _form.value = if (filterId == 0L) {
-                FilterForm(
-                    packages = prefillPkg?.let { setOf(it) } ?: emptySet(),
-                    regexPattern = prefillPattern.orEmpty(),
-                )
+                FilterForm(packages = prefillPkg?.let { setOf(it) } ?: emptySet())
             } else {
                 repository.getNotifFilter(filterId)?.toForm() ?: FilterForm()
             }
@@ -116,6 +117,3 @@ class FilterEditViewModel @Inject constructor(
         dayFlags = dayFlags,
     )
 }
-
-/** Minimal captured notification used for the live pattern-match preview. */
-data class CapturedSample(val packageName: String, val title: String, val text: String)

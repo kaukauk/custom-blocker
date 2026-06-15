@@ -83,7 +83,6 @@ class BlockerRepository @Inject constructor(
                 conditionsMask = p.conditionsMask,
                 dayFlags = p.dayFlags,
                 blockUnsupportedBrowsers = p.blockUnsupportedBrowsers,
-                blockLaunch = p.blockLaunch,
                 chargerInverted = p.chargerInverted,
                 blockNotifications = p.blockNotifications,
                 batchNotifications = p.batchNotifications,
@@ -212,9 +211,6 @@ class BlockerRepository @Inject constructor(
 
     suspend fun setBlockUnsupportedBrowsers(profileId: Long, enabled: Boolean) =
         edit(profileId) { it.copy(blockUnsupportedBrowsers = enabled) }
-
-    suspend fun setBlockLaunch(profileId: Long, enabled: Boolean) =
-        edit(profileId) { it.copy(blockLaunch = enabled) }
 
     suspend fun setBlockNotifications(profileId: Long, enabled: Boolean) =
         edit(profileId) { it.copy(blockNotifications = enabled) }

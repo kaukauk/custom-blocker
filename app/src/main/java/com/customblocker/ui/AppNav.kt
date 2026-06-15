@@ -29,7 +29,7 @@ object Routes {
     const val STATS = "stats"
     const val SETTINGS = "settings"
     const val NOTIFICATIONS = "notifications"
-    const val NOTIF_FILTER = "notif_filter/{filterId}?pkg={pkg}&pattern={pattern}"
+    const val NOTIF_FILTER = "notif_filter/{filterId}?pkg={pkg}&focus={focus}"
 
     fun profile(id: Long) = "profile/$id"
     fun picker(id: Long) = "picker/$id"
@@ -38,10 +38,10 @@ object Routes {
     fun map(id: Long, geoId: Long? = null) =
         "map/$id" + (geoId?.let { "?geoId=$it" } ?: "")
     fun websites(id: Long) = "websites/$id"
-    fun notifFilter(filterId: Long = 0, pkg: String? = null, pattern: String? = null): String {
+    fun notifFilter(filterId: Long = 0, pkg: String? = null, focus: String? = null): String {
         val q = buildList {
             pkg?.takeIf { it.isNotBlank() }?.let { add("pkg=${android.net.Uri.encode(it)}") }
-            pattern?.takeIf { it.isNotBlank() }?.let { add("pattern=${android.net.Uri.encode(it)}") }
+            focus?.takeIf { it.isNotBlank() }?.let { add("focus=${android.net.Uri.encode(it)}") }
         }
         return "notif_filter/$filterId" + (if (q.isEmpty()) "" else "?" + q.joinToString("&"))
     }
@@ -115,7 +115,7 @@ fun AppNav() {
                 onAddFilter = { navController.navigate(Routes.notifFilter()) },
                 onEditFilter = { id -> navController.navigate(Routes.notifFilter(id)) },
                 onCreateFromNotification = { pkg, seed ->
-                    navController.navigate(Routes.notifFilter(pkg = pkg, pattern = Regex.escape(seed.take(60))))
+                    navController.navigate(Routes.notifFilter(pkg = pkg, focus = seed.take(120)))
                 },
             )
         }
@@ -124,7 +124,7 @@ fun AppNav() {
             arguments = listOf(
                 navArgument("filterId") { type = NavType.LongType },
                 navArgument("pkg") { type = NavType.StringType; defaultValue = "" },
-                navArgument("pattern") { type = NavType.StringType; defaultValue = "" },
+                navArgument("focus") { type = NavType.StringType; defaultValue = "" },
             ),
         ) {
             FilterEditScreen(onBack = { navController.popBackStack() })
