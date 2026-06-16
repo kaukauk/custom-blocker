@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.HourglassEmpty
@@ -66,18 +65,15 @@ private data class GateInfo(val gate: UnlockGate, val icon: ImageVector, val tit
 private val GATES = listOf(
     GateInfo(
         UnlockGate.PIN, Icons.Default.Pin, "PIN",
-        "Enter a PIN to unlock. If you ever forget it you won't be stuck — you can still unlock " +
-            "after a long wait you set below.",
+        "Unlock any time by entering your PIN.",
     ),
     GateInfo(
         UnlockGate.COUNTDOWN, Icons.Default.HourglassEmpty, "Countdown",
-        "Each time you unlock, wait out a countdown with the dialog kept open. Closing it cancels, " +
-            "so unlocking always costs you the wait.",
+        "Unlock by waiting out a short timer.",
     ),
     GateInfo(
         UnlockGate.TIMER, Icons.Default.Lock, "Timer",
-        "Commit for a fixed time — Strict Mode can't be switched off until it elapses. The strictest " +
-            "option; optionally allow short earned-unlock breaks.",
+        "Stays locked for a set time. No unlocking early.",
     ),
 )
 
@@ -224,7 +220,6 @@ fun StrictModeScreen(
                         UnlockGate.PIN -> PinEditor(config = config, locked = locked, viewModel = viewModel)
                         UnlockGate.COUNTDOWN -> DurationEditor(
                             title = "Countdown length",
-                            description = "Each time you unlock, wait this long with the dialog kept open.",
                             minutes = config.timerMinutes,
                             showDays = false,
                             locked = locked,
@@ -233,7 +228,6 @@ fun StrictModeScreen(
                         UnlockGate.TIMER -> {
                             DurationEditor(
                                 title = "Stay locked for",
-                                description = "Strict Mode turns on for this long and can't be switched off until it ends.",
                                 minutes = config.timerMinutes,
                                 showDays = true,
                                 locked = locked,
@@ -259,8 +253,9 @@ fun StrictModeScreen(
 }
 
 /**
- * One unlock method as an expandable card (accordion). Tapping the header expands its description;
- * a "Use this method" button selects it and reveals its variable [editor] (scroll wheels etc.).
+ * One unlock method as an expandable card. The radio circle on the right selects it as the active
+ * gate; tapping the row expands a dropdown showing the method's description. Only the selected method
+ * reveals its variable [editor] (PIN entry, scroll wheels, etc.) below the description.
  */
 @Composable
 private fun GateCard(
@@ -276,7 +271,7 @@ private fun GateCard(
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 Modifier.fillMaxWidth().clickable { onExpand() },
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -285,14 +280,13 @@ private fun GateCard(
                     tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(info.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                if (selected) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
-                }
                 Icon(
                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // The selection circle. Picking it makes this the active gate (and reveals its editor).
+                RadioButton(selected = selected, onClick = onSelect, enabled = enabled)
             }
             AnimatedVisibility(visible = expanded) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -301,11 +295,7 @@ private fun GateCard(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (selected) {
-                        editor()
-                    } else {
-                        FilledTonalButton(onClick = onSelect, enabled = enabled) { Text("Use this method") }
-                    }
+                    if (selected) editor()
                 }
             }
         }
@@ -386,7 +376,7 @@ private fun PinEditor(config: com.customblocker.data.prefs.StrictModeConfig, loc
 @Composable
 private fun DurationEditor(
     title: String,
-    description: String,
+    description: String? = null,
     minutes: Int,
     showDays: Boolean,
     locked: Boolean,
@@ -397,7 +387,9 @@ private fun DurationEditor(
     val m = minutes % 60
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall)
-        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (description != null) {
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             if (showDays) WheelCol("days", d, 0..30, locked) { onSet(it * 1440 + h * 60 + m) }
             WheelCol("hours", h, 0..23, locked) { onSet(d * 1440 + it * 60 + m) }

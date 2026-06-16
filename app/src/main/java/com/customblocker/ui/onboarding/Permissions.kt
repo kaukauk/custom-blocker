@@ -98,6 +98,8 @@ object Permissions {
     }
 
     fun openOverlaySettings(context: Context) {
+        // Overlay has no grant callback, so poll for it and pop the app back once it flips on.
+        PermissionReturn.watchOverlayGrant(context)
         // The package: URI is the canonical way to land on OUR per-app overlay toggle. We use plain
         // NEW_TASK (not CLEAR_TASK) and no highlight extras: both can override the package routing on
         // some builds and bounce the user to the general list instead.
