@@ -49,8 +49,14 @@ class BlockerNotificationListener : NotificationListenerService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Last (package → "title\ntext") seen, to drop the rapid duplicate updates ongoing apps post. */
-    @Volatile private var lastSeen: Pair<String, String>? = null
+    /** Fingerprint → last-captured time, to collapse the rapid re-posts apps make (single thread). */
+    private val recentByFingerprint = HashMap<String, Long>()
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        // If the user just granted notification access from the app, pop back instead of stranding them.
+        com.customblocker.service.PermissionReturn.returnToAppIfArmed(this)
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val pkg = sbn.packageName ?: return
@@ -60,6 +66,12 @@ class BlockerNotificationListener : NotificationListenerService() {
         // Ongoing notifications (media transport, downloads, calls) aren't "inbox" items and update
         // constantly — skip them entirely so neither the filters nor the history get spammed.
         if (sbn.notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return
+        // Live/updating categories (media playback, progress bars, ongoing services/calls) re-post on
+        // every tick — the main source of history spam (e.g. a playing video). Not inbox items.
+        if (sbn.notification.category in SKIP_CATEGORIES) return
+        // Media notifications (player controls) carry a MediaSession even when their category isn't
+        // set to TRANSPORT — they're not real "notifications", so skip them too.
+        if (sbn.notification.extras.containsKey(Notification.EXTRA_MEDIA_SESSION)) return
 
         val extras = sbn.notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
@@ -123,7 +135,12 @@ class BlockerNotificationListener : NotificationListenerService() {
         }
     }
 
-    /** Append to the in-app history, deduping the rapid identical re-posts some apps make. */
+    /**
+     * Append to the in-app history, suppressing the same notification re-posted within
+     * [DEDUP_WINDOW_MS]. Apps re-post identical (or rapidly-updating) notifications constantly; without
+     * this the inbox fills with duplicates. Keyed on package + title + text so genuinely new messages
+     * still log, while a burst of the same one collapses to a single entry.
+     */
     private fun logCaptured(
         pkg: String,
         title: String,
@@ -131,9 +148,17 @@ class BlockerNotificationListener : NotificationListenerService() {
         filterId: Long?,
         action: NotifActionType?,
     ) {
-        val fingerprint = pkg to "$title\n$text"
-        if (fingerprint == lastSeen) return
-        lastSeen = fingerprint
+        val now = System.currentTimeMillis()
+        val fingerprint = "$pkg$title$text"
+        val last = recentByFingerprint[fingerprint]
+        if (last != null && now - last < DEDUP_WINDOW_MS) {
+            recentByFingerprint[fingerprint] = now // keep collapsing a continuous stream
+            return
+        }
+        recentByFingerprint[fingerprint] = now
+        if (recentByFingerprint.size > 256) {
+            recentByFingerprint.entries.removeAll { now - it.value > DEDUP_WINDOW_MS }
+        }
         val entity = CapturedNotificationEntity(
             packageName = pkg,
             title = title,
@@ -153,5 +178,21 @@ class BlockerNotificationListener : NotificationListenerService() {
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
+    }
+
+    private companion object {
+        /** Same notification re-posted within this window is treated as a duplicate (not re-logged). */
+        const val DEDUP_WINDOW_MS = 60_000L
+
+        /** Notification categories that re-post on every tick — never inbox items. */
+        val SKIP_CATEGORIES = setOf(
+            Notification.CATEGORY_TRANSPORT,   // media playback controls
+            Notification.CATEGORY_PROGRESS,    // download / upload progress
+            Notification.CATEGORY_SERVICE,     // background service status
+            Notification.CATEGORY_CALL,        // ongoing call
+            Notification.CATEGORY_NAVIGATION,  // turn-by-turn navigation
+            Notification.CATEGORY_SYSTEM,      // system status
+            Notification.CATEGORY_STOPWATCH,   // running stopwatch
+        )
     }
 }

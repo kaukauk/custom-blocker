@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -88,6 +89,7 @@ fun NotificationsScreen(
             when (tab) {
                 0 -> HistoryList(
                     history = history,
+                    loadIcon = viewModel::iconBitmap,
                     onTap = { onCreateFromNotification(it.packageName, it.text.ifBlank { it.title }) },
                     onDelete = { viewModel.deleteCaptured(it) },
                 )
@@ -105,6 +107,7 @@ fun NotificationsScreen(
 @Composable
 private fun HistoryList(
     history: List<CapturedRow>,
+    loadIcon: (String) -> androidx.compose.ui.graphics.ImageBitmap?,
     onTap: (CapturedRow) -> Unit,
     onDelete: (Long) -> Unit,
 ) {
@@ -130,7 +133,9 @@ private fun HistoryList(
                 Row(
                     Modifier.fillMaxWidth().padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    AppIcon(row.packageName, loadIcon, Modifier.size(36.dp))
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(

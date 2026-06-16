@@ -75,6 +75,8 @@ class FilterEditViewModel @Inject constructor(
 
     fun label(pkg: String): String = lister.label(pkg)
 
+    fun iconBitmap(pkg: String) = lister.iconBitmap(pkg)
+
     fun save(form: FilterForm, onDone: () -> Unit) = viewModelScope.launch {
         repository.upsertNotifFilter(form.toEntity())
         onDone()

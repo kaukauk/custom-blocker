@@ -125,6 +125,8 @@ class BlockerAccessibilityService : AccessibilityService() {
             Context.RECEIVER_NOT_EXPORTED,
         )
         L.d(L.FG, "accessibility service connected")
+        // If the user just enabled us from the app, pop back to the app instead of stranding them in Settings.
+        com.customblocker.service.PermissionReturn.returnToAppIfArmed(this)
         // Keep the latest Strict Mode config for the L3 settings guard.
         scope.launch { strictModeStore.config.collect { strictConfig = it } }
         // Mid-session ticker: accrue usage + re-evaluate the current app every few seconds, and

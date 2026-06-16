@@ -201,9 +201,9 @@ fun ProfileListScreen(
                                     onClick = { menuOpen = false; customPauseFor = profile.id },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Pause indefinitely") },
+                                    text = { Text("Disable profile") },
                                     enabled = !pLocked,
-                                    onClick = { menuOpen = false; viewModel.pauseIndefinitely(profile.id) },
+                                    onClick = { menuOpen = false; viewModel.disableProfile(profile.id) },
                                 )
                             }
                             HorizontalDivider()

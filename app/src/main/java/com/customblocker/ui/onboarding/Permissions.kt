@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import com.customblocker.service.PermissionReturn
 import com.customblocker.service.accessibility.BlockerAccessibilityService
 import com.customblocker.service.notifications.BlockerNotificationListener
 
@@ -66,6 +67,7 @@ object Permissions {
     }
 
     fun openNotificationAccessSettings(context: Context) {
+        PermissionReturn.arm()   // pop back to the app once access is toggled on
         val component = ComponentName(context, BlockerNotificationListener::class.java)
         // API 30+ can deep-link to OUR per-app notification-access screen (a single toggle) instead
         // of the long list. Fall back to the list (highlighting our row) on older devices.
@@ -86,6 +88,7 @@ object Permissions {
     }
 
     fun openAccessibilitySettings(context: Context) {
+        PermissionReturn.arm()   // pop back to the app once the service is enabled
         val key = ComponentName(context, BlockerAccessibilityService::class.java).flattenToString()
         context.startActivity(
             Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)

@@ -75,7 +75,7 @@ class ProfileListViewModel @Inject constructor(
                     id = rule.id,
                     title = rule.title,
                     summary = when {
-                        rule.pausedUntilMillis == Long.MAX_VALUE -> "Paused indefinitely"
+                        rule.pausedUntilMillis == Long.MAX_VALUE -> "Disabled"
                         paused -> "Paused until ${clock(rule.pausedUntilMillis)}"
                         else -> summarize(rule, used, launchesUsed, usageOn, launchOn, usageExceeded, launchExceeded)
                     },
@@ -102,8 +102,8 @@ class ProfileListViewModel @Inject constructor(
         repository.setPausedUntil(profileId, System.currentTimeMillis() + durationMillis)
     }
 
-    /** Pause a profile with no expiry — a soft "disable". "Resume now" re-enables it. */
-    fun pauseIndefinitely(profileId: Long) = viewModelScope.launch {
+    /** Disable a profile with no expiry (pause forever). "Resume now" re-enables it. */
+    fun disableProfile(profileId: Long) = viewModelScope.launch {
         if (lockInfo.value.locked(profileId)) return@launch
         repository.setPausedUntil(profileId, Long.MAX_VALUE)
     }

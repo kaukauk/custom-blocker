@@ -7,14 +7,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Checkbox
@@ -24,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -44,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.customblocker.domain.engine.DayFlags
 import com.customblocker.domain.engine.NotifActionType
 import com.customblocker.domain.engine.NotifMatchTarget
 import com.customblocker.domain.engine.NotifSample
@@ -143,6 +147,9 @@ fun FilterEditScreen(
                             selected = true,
                             onClick = { packages = packages - pkg },
                             label = { Text(viewModel.label(pkg)) },
+                            leadingIcon = {
+                                AppIcon(pkg, viewModel::iconBitmap, Modifier.size(22.dp))
+                            },
                             trailingIcon = { Icon(Icons.Default.Close, contentDescription = "Remove") },
                         )
                     }
@@ -243,24 +250,27 @@ fun FilterEditScreen(
 
             // --- Schedule ---
             SectionLabel("Active window")
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(onClick = { timePickerFor = TimeTarget.START }, label = { Text("From ${hhmm(startMinute)}") })
-                AssistChip(onClick = { timePickerFor = TimeTarget.END }, label = { Text("To ${hhmm(endMinute)}") })
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TimeField("From", hhmm(startMinute), Modifier.weight(1f)) { timePickerFor = TimeTarget.START }
+                TimeField("To", hhmm(endMinute), Modifier.weight(1f)) { timePickerFor = TimeTarget.END }
             }
+            WindowTimeline(
+                startMinute = startMinute,
+                endMinute = endMinute,
+                action = action,
+                batchIntervalMinutes = batchMinutes,
+                releaseTimes = releaseTimes,
+            )
             Text(
                 "Default is all day. The filter only acts on notifications posted inside this window.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DAYS.forEach { (bit, label) ->
-                    FilterChip(
-                        selected = dayFlags and bit != 0,
-                        onClick = { dayFlags = dayFlags xor bit },
-                        label = { Text(label) },
-                    )
-                }
-            }
+            DayToggleRow(dayFlags = dayFlags, onToggle = { dayFlags = dayFlags xor it })
         }
     }
 
@@ -268,6 +278,7 @@ fun FilterEditScreen(
         AppPickerDialog(
             apps = apps,
             selected = packages,
+            loadIcon = viewModel::iconBitmap,
             onToggle = { pkg, add -> packages = if (add) packages + pkg else packages - pkg },
             onClose = { showAppPicker = false },
         )
@@ -299,6 +310,16 @@ private enum class TimeTarget { START, END, RELEASE }
 @Composable
 private fun SectionLabel(text: String) {
     Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+}
+
+/** A clearly-tappable time field (clock icon + "From 09:00") that opens the time picker. */
+@Composable
+private fun TimeField(label: String, value: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick, modifier = modifier) {
+        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("$label $value")
+    }
 }
 
 @Composable
@@ -400,6 +421,7 @@ private fun TimePickerDialog(initialMinute: Int, onConfirm: (Int) -> Unit, onDis
 private fun AppPickerDialog(
     apps: List<com.customblocker.ui.InstalledApp>,
     selected: Set<String>,
+    loadIcon: (String) -> androidx.compose.ui.graphics.ImageBitmap?,
     onToggle: (String, Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -430,8 +452,10 @@ private fun AppPickerDialog(
                         Row(
                             Modifier.fillMaxWidth().clickable { onToggle(app.packageName, !isSel) }.padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Checkbox(checked = isSel, onCheckedChange = { onToggle(app.packageName, it) })
+                            AppIcon(app.packageName, loadIcon, Modifier.size(28.dp))
                             Text(app.label, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
@@ -462,10 +486,5 @@ private fun actionHint(a: NotifActionType) = when (a) {
     NotifActionType.BATCH -> "Hold it and re-deliver it at fixed intervals from midnight."
     NotifActionType.DELAY -> "Hold it and re-deliver it at the times you set."
 }
-
-private val DAYS = listOf(
-    DayFlags.MON to "M", DayFlags.TUE to "T", DayFlags.WED to "W", DayFlags.THU to "T",
-    DayFlags.FRI to "F", DayFlags.SAT to "S", DayFlags.SUN to "S",
-)
 
 private fun hhmm(minuteOfDay: Int): String = "%02d:%02d".format(minuteOfDay / 60, minuteOfDay % 60)
