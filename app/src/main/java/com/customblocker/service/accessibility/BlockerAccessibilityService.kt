@@ -103,6 +103,13 @@ class BlockerAccessibilityService : AccessibilityService() {
     private var lastUrl: String? = null
     /** Package we last recorded a block for, to avoid re-counting the 3s ticker re-evaluations. */
     private var lastBlockedPkg: String? = null
+    /**
+     * When we last ejected Settings to the Allowed-Settings launcher. The Settings app fires a burst
+     * of window-state events while it loads/animates a screen; without debouncing, each one re-runs
+     * the eject (relaunching our launcher), which thrashes and makes the launcher flash up and vanish.
+     * One eject per burst is enough — the launcher then sits in front of Settings.
+     */
+    private var lastSettingsEjectMs: Long = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -190,6 +197,9 @@ class BlockerAccessibilityService : AccessibilityService() {
                     lastBlockedPkg = null         // new foreground entry → a fresh block can count
                     // Left the Settings app → end any allowed-settings permit.
                     if (pkg != SettingsGuard.SETTINGS_PKG) settingsGate.clear()
+                    // Left the guarded surfaces entirely → reset the eject debounce so reopening
+                    // Settings later ejects immediately rather than being swallowed.
+                    if (pkg !in SettingsGuard.GUARDED_PACKAGES) lastSettingsEjectMs = 0L
 
                     accrueUsage()                 // finalize the previous app's foreground time
                     trackedPkg = pkg
@@ -281,25 +291,36 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
         val now = System.currentTimeMillis()
         if (!settingsGate.isPermitted(now)) {
-            showAllowedSettings(pkg)
+            ejectToAllowedSettings(pkg)
             return true
         }
         if (SettingsGuard.isDangerous(titles)) {
             settingsGate.clear()
-            showAllowedSettings(pkg)
+            ejectToAllowedSettings(pkg)
             return true
         }
         settingsGate.touch(now)   // safe screen — keep the permit alive
         return false
     }
 
-    /** Eject the real Settings app and present our curated Allowed Settings launcher instead. */
-    private fun showAllowedSettings(pkg: String) {
+    /**
+     * Eject the real Settings app and present our curated Allowed Settings launcher instead, but at
+     * most once per burst of Settings window events (see [lastSettingsEjectMs]). Settings emits several
+     * window-state changes while loading a screen; acting on every one relaunches our launcher
+     * repeatedly, which thrashes and makes it flash up and immediately vanish.
+     */
+    private fun ejectToAllowedSettings(pkg: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastSettingsEjectMs < SETTINGS_EJECT_DEBOUNCE_MS) return
+        lastSettingsEjectMs = now
         if (pkg != lastBlockedPkg) {
             statsRecorder.recordBlock(pkg)
             lastBlockedPkg = pkg
         }
-        performGlobalAction(GLOBAL_ACTION_HOME)
+        // Launch our launcher straight over Settings (no GLOBAL_ACTION_HOME first): going home first
+        // flashes the launcher and lets a late Settings window event win the race, so our activity
+        // appears for a fraction of a second and then disappears. A direct NEW_TASK launch covers
+        // Settings cleanly.
         startActivity(
             Intent(this, com.customblocker.ui.settings.AllowedSettingsActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -366,5 +387,7 @@ class BlockerAccessibilityService : AccessibilityService() {
     private companion object {
         const val TICK_MS = 3_000L
         const val SYSTEM_UI_PKG = "com.android.systemui"
+        /** Coalesce a burst of Settings window events into a single eject (see [ejectToAllowedSettings]). */
+        const val SETTINGS_EJECT_DEBOUNCE_MS = 1_200L
     }
 }
