@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import com.customblocker.data.prefs.StrictModeConfig
 import com.customblocker.data.prefs.StrictModeStore
@@ -284,20 +285,31 @@ private fun ChargerUnlock(vm: LockViewModel, onUnlocked: () -> Unit, onDismiss: 
 }
 
 /**
- * COUNTDOWN gate: wait out a countdown that must stay on-screen; when it reaches zero we unlock for
- * this session. Closing it early cancels (re-locks). Friction-to-unlock, not a fixed commitment.
+ * COUNTDOWN gate: wait out a countdown that must stay on-screen AND in the foreground; when it
+ * reaches zero we unlock for this session. The wait restarts from the top the moment you leave —
+ * switching app, going home, or the screen turning off all drop the host below RESUMED, which
+ * cancels the tick and resets the timer on return. Closing it cancels (re-locks). This makes it
+ * genuine friction: you must sit and watch the whole countdown with the screen on.
  */
 @Composable
 private fun CountdownUnlock(minutes: Int, vm: LockViewModel, onUnlocked: () -> Unit, onDismiss: () -> Unit) {
-    var remaining by remember { mutableStateOf(minutes * 60) }
-    LaunchedEffect(Unit) {
-        while (remaining > 0) { delay(1_000); remaining-- }
-        vm.markUnlocked(); onUnlocked()
+    val total = minutes * 60
+    var remaining by remember { mutableStateOf(total) }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        // Only tick while the screen is on and the app is in the foreground. repeatOnLifecycle
+        // cancels this block when we drop below RESUMED (app switch / home / screen off) and runs it
+        // again on return — so each return restarts the wait from the full duration.
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            remaining = total
+            while (remaining > 0) { delay(1_000); remaining-- }
+            vm.markUnlocked(); onUnlocked()
+        }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Wait to unlock") },
-        text = { Text("Unlocks in ${formatCountdown(remaining * 1000L)}. Keep this open.") },
+        text = { Text("Unlocks in ${formatCountdown(remaining * 1000L)}. Keep this open — leaving or turning off the screen restarts it.") },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
