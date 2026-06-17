@@ -8,6 +8,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
+import com.customblocker.data.prefs.SettingsGuardMode
 import com.customblocker.data.prefs.StrictModeConfig
 import com.customblocker.data.prefs.StrictModeStore
 import com.customblocker.data.prefs.UnlockGate
@@ -279,28 +280,56 @@ class BlockerAccessibilityService : AccessibilityService() {
 
     /**
      * L3 Settings/installer handling. Returns true if it acted (caller should stop processing).
-     *  - Installer screens: ejected to home outright.
-     *  - Settings while no permit is held: replaced with the Allowed Settings launcher.
-     *  - Settings while permitted: allowed to stay, except dangerous (tamper) screens which clear the
-     *    permit and bounce back to the launcher. Safe screens refresh the permit so it doesn't lapse.
+     *  - Installer screens: ejected to home outright (both modes).
+     *  - BLOCK_RISKY: Settings is freely usable; only dangerous (tamper) screens eject to home.
+     *  - SAFE_ONLY: Settings is gated behind the Allowed Settings launcher; with a permit the user is
+     *    confined to the allowed screens + their children, and any other screen (or a tamper screen)
+     *    ejects back to the launcher.
      */
     private fun guardSettings(pkg: String, titles: List<CharSequence>): Boolean {
         if (SettingsGuard.isInstaller(pkg)) {
             enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
             return true
         }
+        // Block-list mode: Settings stays freely usable; only the dangerous tamper screens are
+        // ejected (straight to home — there's no allowed-settings launcher in this mode).
+        if (strictConfig.settingsGuardMode == SettingsGuardMode.BLOCK_RISKY) {
+            if (SettingsGuard.isDangerous(titles)) {
+                enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
+                return true
+            }
+            return false
+        }
+        // Allow-list mode (safe screens only). Settings is gated behind the curated launcher; once
+        // the user taps a shortcut a permit opens and they may use that allowed screen + its children,
+        // but NOTHING else — wandering to any other Settings screen (incl. the home list) ejects them
+        // back to the launcher.
         val now = System.currentTimeMillis()
         if (!settingsGate.isPermitted(now)) {
             ejectToAllowedSettings(pkg)
             return true
         }
+        // Tamper screens always eject, even mid-grace.
         if (SettingsGuard.isDangerous(titles)) {
             settingsGate.clear()
             ejectToAllowedSettings(pkg)
             return true
         }
-        settingsGate.touch(now)   // safe screen — keep the permit alive
-        return false
+        // On an allowed screen (or one of its children) → keep the permit alive, let them stay.
+        if (SettingsGuard.isAllowed(titles)) {
+            settingsGate.touch(now)
+            return false
+        }
+        // Just tapped a shortcut: the deep-link briefly shows the home/loading frames. Don't treat
+        // that as roaming — let it settle until the allowed screen surfaces.
+        if (settingsGate.inGrace(now)) return false
+        // A transient/sub-window with no title we can classify (e.g. a dialog over the allowed
+        // screen). Leave the user where they are rather than risk a false eject.
+        if (SettingsGuard.hasNoTitle(titles)) return false
+        // A recognised OTHER screen (Settings home, Display, …): roamed off the allowed area → eject.
+        settingsGate.clear()
+        ejectToAllowedSettings(pkg)
+        return true
     }
 
     /**

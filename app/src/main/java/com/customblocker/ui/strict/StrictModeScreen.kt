@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.customblocker.data.prefs.SettingsGuardMode
 import com.customblocker.data.prefs.StrictModeStore
 import com.customblocker.data.prefs.UnlockGate
 import com.customblocker.service.admin.BlockerDeviceAdminReceiver
@@ -173,6 +174,35 @@ fun StrictModeScreen(
                     enabled = !locked,
                     onClick = { viewModel.setLevel(lvl) },
                 )
+            }
+
+            // L3 only: how the device Settings app is guarded — allow-list (curated launcher) vs
+            // block-list (Settings stays usable, only tamper screens are blocked).
+            if (config.level >= 3) {
+                item {
+                    Text("Settings access", style = MaterialTheme.typography.titleSmall)
+                    HorizontalDivider()
+                }
+                item {
+                    OptionRow(
+                        selected = config.settingsGuardMode == SettingsGuardMode.SAFE_ONLY,
+                        title = "Safe screens only",
+                        description = "Settings opens our shortlist — Wi-Fi, Bluetooth, Language & " +
+                            "Sound. Everything else is blocked.",
+                        enabled = !locked,
+                        onClick = { viewModel.setSettingsGuardMode(SettingsGuardMode.SAFE_ONLY) },
+                    )
+                }
+                item {
+                    OptionRow(
+                        selected = config.settingsGuardMode == SettingsGuardMode.BLOCK_RISKY,
+                        title = "Block risky screens",
+                        description = "Use Settings normally. Only screens that could disable the " +
+                            "blocker (Apps, Accessibility, Device admin, Date & time…) are blocked.",
+                        enabled = !locked,
+                        onClick = { viewModel.setSettingsGuardMode(SettingsGuardMode.BLOCK_RISKY) },
+                    )
+                }
             }
 
             // L2/L3 block uninstalling, which needs the Device admin permission. Explain + offer to

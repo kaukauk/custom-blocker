@@ -24,6 +24,16 @@ import javax.inject.Singleton
 enum class UnlockGate { NONE, PIN, COUNTDOWN, TIMER, CHARGER }
 
 /**
+ * How the Level-3 guard treats the device Settings app while Strict Mode is locked.
+ *  - [SAFE_ONLY]: allow-list. Opening Settings shows our curated launcher; only the few safe
+ *    shortcuts (Wi-Fi etc.) are reachable, no free roaming.
+ *  - [BLOCK_RISKY]: block-list. Settings opens normally and is freely usable; only screens that
+ *    could be used to disable the blocker are ejected.
+ * Either way the dangerous-surface list is what protects app integrity.
+ */
+enum class SettingsGuardMode { SAFE_ONLY, BLOCK_RISKY }
+
+/**
  * Strict Mode is app-global (not per-profile). [level]: 1 = lock config, 2 = + block uninstall,
  * 3 = + block device Settings. While [enabled], protected actions require passing the [gate].
  *
@@ -51,6 +61,8 @@ data class StrictModeConfig(
     val pinEmergencyHours: Int = 24,
     /** Wall-clock instant a started "forgot PIN" emergency wait completes (0 = not started). */
     val pinEmergencyUntilMillis: Long = 0L,
+    /** L3 only: whether Settings is allow-listed (safe screens only) or block-listed (risky only). */
+    val settingsGuardMode: SettingsGuardMode = SettingsGuardMode.SAFE_ONLY,
 ) {
     /** True while a TIMER-gate commitment is still running at wall-clock [now]. */
     fun timedLockActive(now: Long): Boolean =
@@ -90,6 +102,7 @@ class StrictModeStore @Inject constructor(
         val UNLOCK_UNTIL = longPreferencesKey("strict_unlock_until")
         val PIN_EMERGENCY_HOURS = intPreferencesKey("strict_pin_emergency_hours")
         val PIN_EMERGENCY_UNTIL = longPreferencesKey("strict_pin_emergency_until")
+        val SETTINGS_GUARD_MODE = stringPreferencesKey("strict_settings_guard_mode")
     }
 
     val config: Flow<StrictModeConfig> = context.dataStore.data.map { p ->
@@ -106,6 +119,9 @@ class StrictModeStore @Inject constructor(
             unlockUntilMillis = p[Keys.UNLOCK_UNTIL] ?: 0L,
             pinEmergencyHours = (p[Keys.PIN_EMERGENCY_HOURS] ?: 24).coerceIn(PIN_EMERGENCY_FLOOR, PIN_EMERGENCY_MAX),
             pinEmergencyUntilMillis = p[Keys.PIN_EMERGENCY_UNTIL] ?: 0L,
+            settingsGuardMode = runCatching {
+                SettingsGuardMode.valueOf(p[Keys.SETTINGS_GUARD_MODE] ?: SettingsGuardMode.SAFE_ONLY.name)
+            }.getOrDefault(SettingsGuardMode.SAFE_ONLY),
         )
     }
 
@@ -121,6 +137,8 @@ class StrictModeStore @Inject constructor(
     }
     suspend fun setLevel(level: Int) = context.dataStore.edit { it[Keys.LEVEL] = level.coerceIn(1, 3) }
     suspend fun setGate(gate: UnlockGate) = context.dataStore.edit { it[Keys.GATE] = gate.name }
+    suspend fun setSettingsGuardMode(mode: SettingsGuardMode) =
+        context.dataStore.edit { it[Keys.SETTINGS_GUARD_MODE] = mode.name }
     suspend fun setTimerMinutes(minutes: Int) =
         context.dataStore.edit { it[Keys.TIMER] = clampMinutes(minutes) }
 

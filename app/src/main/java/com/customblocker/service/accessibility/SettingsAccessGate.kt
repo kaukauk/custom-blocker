@@ -19,19 +19,33 @@ import javax.inject.Singleton
 class SettingsAccessGate @Inject constructor() {
 
     @Volatile private var permittedUntilMillis: Long = 0L
+    @Volatile private var graceUntilMillis: Long = 0L
 
-    /** Open / refresh the permit window from [nowMillis]. */
-    fun permit(nowMillis: Long) { permittedUntilMillis = nowMillis + WINDOW_MS }
+    /**
+     * Open / refresh the permit window from [nowMillis], plus a short *grace* window. During grace
+     * the allow-list confinement is suspended: deep-linking into an allowed screen briefly surfaces
+     * the Settings home / generic loading frames, and without grace those would be read as "roamed
+     * off the allowed screen" and eject the user the instant they tap a shortcut.
+     */
+    fun permit(nowMillis: Long) {
+        permittedUntilMillis = nowMillis + WINDOW_MS
+        graceUntilMillis = nowMillis + GRACE_MS
+    }
+
+    /** True while the post-tap deep-link is still settling (see [permit]). */
+    fun inGrace(nowMillis: Long): Boolean = graceUntilMillis > nowMillis
 
     /** Keep the permit alive while the user stays on an allowed screen. */
     fun touch(nowMillis: Long) { if (permittedUntilMillis > 0L) permittedUntilMillis = nowMillis + WINDOW_MS }
 
     fun isPermitted(nowMillis: Long): Boolean = permittedUntilMillis > nowMillis
 
-    fun clear() { permittedUntilMillis = 0L }
+    fun clear() { permittedUntilMillis = 0L; graceUntilMillis = 0L }
 
     private companion object {
         /** How long a single allowed-Settings session stays permitted without interaction. */
         const val WINDOW_MS = 2 * 60 * 1000L
+        /** How long after tapping a shortcut to suspend allow-list confinement (deep-link settle). */
+        const val GRACE_MS = 4 * 1000L
     }
 }

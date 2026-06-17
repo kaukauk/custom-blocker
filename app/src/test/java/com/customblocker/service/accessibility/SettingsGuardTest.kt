@@ -38,4 +38,40 @@ class SettingsGuardTest {
         assertFalse(SettingsGuard.isDangerous(listOf("Bluetooth")))
         assertFalse(SettingsGuard.isDangerous(emptyList()))
     }
+
+    // Widened danger list: app management + integrity-critical surfaces eject in both modes.
+    @Test fun widenedDangerous_detected() {
+        assertTrue(SettingsGuard.isDangerous(listOf("Apps")))
+        assertTrue(SettingsGuard.isDangerous(listOf("Force stop")))
+        assertTrue(SettingsGuard.isDangerous(listOf("Special app access")))
+        assertTrue(SettingsGuard.isDangerous(listOf("Notification access")))
+        assertTrue(SettingsGuard.isDangerous(listOf("Battery")))
+        assertTrue(SettingsGuard.isDangerous(listOf("Users")))
+        assertTrue(SettingsGuard.isDangerous(listOf("Display over other apps")))
+    }
+
+    // Safe-screens-only confinement: the four shortcuts and their children are allowed…
+    @Test fun allowList_shortcutsAndChildren() {
+        assertTrue(SettingsGuard.isAllowed(listOf("Wi-Fi")))
+        assertTrue(SettingsGuard.isAllowed(listOf("Saved networks")))
+        assertTrue(SettingsGuard.isAllowed(listOf("Bluetooth")))
+        assertTrue(SettingsGuard.isAllowed(listOf("Languages & input")))
+        assertTrue(SettingsGuard.isAllowed(listOf("On-screen keyboard")))
+        assertTrue(SettingsGuard.isAllowed(listOf("Sound & vibration")))
+        assertTrue(SettingsGuard.isAllowed(listOf("Phone ringtone")))
+    }
+
+    // …and everything else (home, other categories) is not — so the user is confined.
+    @Test fun allowList_rejectsOtherScreens() {
+        assertFalse(SettingsGuard.isAllowed(listOf("Settings")))
+        assertFalse(SettingsGuard.isAllowed(listOf("Display")))
+        assertFalse(SettingsGuard.isAllowed(listOf("Storage")))
+        assertFalse(SettingsGuard.isAllowed(emptyList()))   // blank → caller decides, not "allowed"
+    }
+
+    @Test fun hasNoTitle_onlyForBlank() {
+        assertTrue(SettingsGuard.hasNoTitle(emptyList()))
+        assertTrue(SettingsGuard.hasNoTitle(listOf("", "  ")))
+        assertFalse(SettingsGuard.hasNoTitle(listOf("Wi-Fi")))
+    }
 }

@@ -38,6 +38,8 @@ class StrictModeViewModel @Inject constructor(
     }
     fun setLevel(level: Int) = viewModelScope.launch { store.setLevel(level) }
     fun setGate(gate: UnlockGate) = viewModelScope.launch { store.setGate(gate) }
+    fun setSettingsGuardMode(mode: com.customblocker.data.prefs.SettingsGuardMode) =
+        viewModelScope.launch { store.setSettingsGuardMode(mode) }
     fun setTimerMinutes(minutes: Int) = viewModelScope.launch { store.setTimerMinutes(minutes) }
     fun setPin(pin: String) = viewModelScope.launch { store.setPin(pin) }
     fun setPinEmergencyHours(hours: Int) = viewModelScope.launch { store.setPinEmergencyHours(hours) }
