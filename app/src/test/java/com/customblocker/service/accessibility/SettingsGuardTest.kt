@@ -41,6 +41,21 @@ class SettingsGuardTest {
         }
     }
 
+    // OEM-variant accessibility screens (e.g. Samsung's) must also eject — the class marker is the
+    // bare "accessibility" root, not the longer AOSP fragment, so the whole tree is covered.
+    @Test fun accessibilityTree_ejectsAcrossOemVariants() {
+        for (cls in listOf(
+            "com.samsung.android.settings.accessibility.AccessibilityMainActivity",
+            "com.samsung.android.settings.accessibility.InstalledServiceActivity",
+            "com.android.settings.SubSettings", // detail page hosting an accessibility fragment
+        )) {
+            // The bare "SubSettings" alone must NOT match (it hosts benign screens too); the
+            // accessibility ones do.
+            val expected = cls.lowercase().contains("accessibility")
+            assertTrue(cls, SettingsGuard.isTamperScreen(cls, emptyList(), false, PKG, LABEL) == expected)
+        }
+    }
+
     // OUR app-info: our label + a single-app action control → eject.
     @Test fun ourAppInfo_ejects() {
         val texts = listOf("custom blocker", "open", "uninstall", "force stop", "storage & cache")

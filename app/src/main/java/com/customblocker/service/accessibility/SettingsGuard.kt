@@ -61,8 +61,11 @@ object SettingsGuard {
      * the whole screen never blocks managing *other* apps.
      */
     private val CAPABILITY_CLASS_MARKERS = listOf(
-        "accessibilitysettings", "accessibilitydetails",
-        "notificationaccess", "zenaccess",
+        // "accessibility" (not "accessibilitysettings") so OEM variants match too — Samsung's
+        // top-level screen is e.g. ...accessibility.AccessibilityMainActivity, which lacks the longer
+        // fragment. Matching the bare root ejects the whole Accessibility tree (top + every child).
+        "accessibility",
+        "notificationaccess", "notificationlistener", "zenaccess",
         "usageaccess",
         "deviceadmin",
         "specialaccess", "specialappaccess",

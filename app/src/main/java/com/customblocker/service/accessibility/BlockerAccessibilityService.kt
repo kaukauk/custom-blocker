@@ -332,6 +332,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         if (strictConfig.settingsGuardMode == SettingsGuardMode.BLOCK_RISKY) {
             if (tamper) {
                 enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
+                resetSettingsApp()
                 return true
             }
             return false
@@ -349,6 +350,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         if (tamper) {
             settingsGate.clear()
             ejectToAllowedSettings(pkg)
+            resetSettingsApp()
             return true
         }
         // On an allowed screen (or one of its children) → keep the permit alive, let them stay.
@@ -415,6 +417,26 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * After ejecting from a tamper screen, wipe the Settings app's back stack so the user can't simply
+     * re-open Settings (icon / recents) and resume deep inside a capability screen. The eject has
+     * already sent Settings to the background (HOME / our launcher over it); a backgrounded app is
+     * killable, so [ActivityManager.killBackgroundProcesses] tears its task down and the next launch
+     * starts fresh at the Settings home. Throttled with the eject so a window-event burst kills once.
+     */
+    private fun resetSettingsApp() {
+        // Kill slightly after the eject: HOME / our launcher is async, so Settings isn't backgrounded
+        // yet on this tick and killBackgroundProcesses (which only touches backgrounded apps) would
+        // no-op. A short delay lets the eject land first.
+        scope.launch {
+            delay(SETTINGS_RESET_DELAY_MS)
+            runCatching {
+                getSystemService(android.app.ActivityManager::class.java)
+                    ?.killBackgroundProcesses(SettingsGuard.SETTINGS_PKG)
+            }
+        }
+    }
+
+    /**
      * Resolve the packages we must never block on top of the static set: every enabled IME (so an
      * allow-list can't block the keyboard the user types with) and the current home launcher.
      */
@@ -478,5 +500,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         const val SETTINGS_EJECT_DEBOUNCE_MS = 1_200L
         /** Min gap between node-tree re-scans on a guarded screen's content-changed event stream. */
         const val SETTINGS_SCAN_THROTTLE_MS = 350L
+        /** Delay before resetting Settings after an eject, so it's backgrounded first (killable). */
+        const val SETTINGS_RESET_DELAY_MS = 400L
     }
 }
