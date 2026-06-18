@@ -111,11 +111,16 @@ class BlockerAccessibilityService : AccessibilityService() {
      * One eject per burst is enough — the launcher then sits in front of Settings.
      */
     private var lastSettingsEjectMs: Long = 0L
+    /** Throttle for re-scanning a guarded Settings screen on its (frequent) content-changed events. */
+    private var lastSettingsScanMs: Long = 0L
+    /** Our own app label ("Custom Blocker"), used to spot screens that are about US in the node tree. */
+    private var selfLabel: String = ""
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         powerManager = getSystemService(PowerManager::class.java)
         engine.selfPackage = packageName   // never block ourselves (can't lock the user out)
+        selfLabel = runCatching { packageManager.getApplicationLabel(applicationInfo).toString() }.getOrDefault("")
         engine.systemPackages = resolveSystemPackages()  // keyboard(s) + launcher: never block
         promoteToForeground()
         registerReceiver(
@@ -182,16 +187,9 @@ class BlockerAccessibilityService : AccessibilityService() {
                 // not a foreground app switch. Ignore it so we keep tracking & re-evaluating the real
                 // app underneath (otherwise usage stops accruing and the app is never re-blocked).
                 if (pkg in transientOverlays) return
-                // Strict Mode L3: block the Settings app (except whitelisted screens like Wi-Fi /
-                // Bluetooth / Language) to stop the user disabling our service / force-stopping us /
-                // removing the device admin. Respects the TIMER commitment (lifts at its deadline).
-                val strictlyLocked =
-                    if (strictConfig.gate == UnlockGate.TIMER) strictConfig.timedLockActive(System.currentTimeMillis())
-                    else strictConfig.enabled && !unlockManager.unlocked.value
-                if (strictlyLocked && strictConfig.level >= 3 && pkg in SettingsGuard.GUARDED_PACKAGES) {
-                    L.d(L.ENGINE, "STRICT L3 settings: pkg=$pkg titles=${event.text}")
-                    if (guardSettings(pkg, event.text)) return
-                }
+                // Strict Mode L3: block the Settings app to stop the user disabling our service /
+                // force-stopping us / removing the device admin. Respects the TIMER commitment.
+                if (maybeGuardSettings(pkg, event)) return
                 if (pkg != lastForeground) {
                     lastForeground = pkg
                     lastUrl = null
@@ -213,10 +211,33 @@ class BlockerAccessibilityService : AccessibilityService() {
                 if (BrowserUrlReader.isKnownBrowser(pkg)) evaluateUrl(pkg)
             }
             // Browsers fire content-changed as the page/address bar updates; re-check the URL.
+            // Settings/SPA screens load their content asynchronously after the window-state event, so
+            // re-scan here too (throttled) to catch our app-info / a capability list once it populates.
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 if (BrowserUrlReader.isKnownBrowser(pkg)) evaluateUrl(pkg)
+                if (pkg in SettingsGuard.GUARDED_PACKAGES) {
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - lastSettingsScanMs >= SETTINGS_SCAN_THROTTLE_MS) {
+                        lastSettingsScanMs = now
+                        maybeGuardSettings(pkg, event)
+                    }
+                }
             }
         }
+    }
+
+    /**
+     * Run the L3 Settings guard if Strict Mode is locked at level 3 and [pkg] is a guarded surface.
+     * Returns true if it ejected (caller should stop processing the event).
+     */
+    private fun maybeGuardSettings(pkg: String, event: AccessibilityEvent): Boolean {
+        if (pkg !in SettingsGuard.GUARDED_PACKAGES) return false
+        if (strictConfig.level < 3) return false
+        val strictlyLocked =
+            if (strictConfig.gate == UnlockGate.TIMER) strictConfig.timedLockActive(System.currentTimeMillis())
+            else strictConfig.enabled && !unlockManager.unlocked.value
+        if (!strictlyLocked) return false
+        return guardSettings(pkg, event.text, event.className?.toString())
     }
 
     /** A granted earned-unlock is bypassing all app/website blocking right now. */
@@ -280,21 +301,36 @@ class BlockerAccessibilityService : AccessibilityService() {
 
     /**
      * L3 Settings/installer handling. Returns true if it acted (caller should stop processing).
-     *  - Installer screens: ejected to home outright (both modes).
-     *  - BLOCK_RISKY: Settings is freely usable; only dangerous (tamper) screens eject to home.
+     * Detection is driven by the active window's node tree + class (titles are unreliable on modern
+     * Android — see [SettingsGuard]).
+     *  - Installer (single-app surface): only ejects when the dialog concerns OUR app.
+     *  - BLOCK_RISKY: Settings is freely usable; only a tamper screen (our app-info / a capability
+     *    list) ejects to home. Other apps' screens stay usable.
      *  - SAFE_ONLY: Settings is gated behind the Allowed Settings launcher; with a permit the user is
-     *    confined to the allowed screens + their children, and any other screen (or a tamper screen)
-     *    ejects back to the launcher.
+     *    confined to the allowed screens + their children, and any tamper/other screen ejects back.
      */
-    private fun guardSettings(pkg: String, titles: List<CharSequence>): Boolean {
-        if (SettingsGuard.isInstaller(pkg)) {
-            enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
-            return true
+    private fun guardSettings(pkg: String, titles: List<CharSequence>, className: String?): Boolean {
+        val (texts, hasToggle) = scanActiveWindow()
+
+        // Installer: a single-app surface (e.g. the uninstall dialog). Only act when it's about us;
+        // uninstalling / managing other apps stays allowed.
+        if (SettingsGuard.isSingleAppSurface(pkg)) {
+            if (SettingsGuard.mentionsSelf(texts, packageName, selfLabel)) {
+                enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
+                return true
+            }
+            return false
         }
-        // Block-list mode: Settings stays freely usable; only the dangerous tamper screens are
-        // ejected (straight to home — there's no allowed-settings launcher in this mode).
+
+        val tamper = SettingsGuard.isTamperScreen(className, texts, hasToggle, packageName, selfLabel) ||
+            SettingsGuard.isDangerous(titles)
+        if (com.customblocker.BuildConfig.DEBUG) {
+            L.d(L.ENGINE, "settings-scan pkg=$pkg cls=$className tamper=$tamper toggle=$hasToggle titles=$titles")
+        }
+
+        // Block-list mode: Settings stays freely usable; only tamper screens eject (straight to home).
         if (strictConfig.settingsGuardMode == SettingsGuardMode.BLOCK_RISKY) {
-            if (SettingsGuard.isDangerous(titles)) {
+            if (tamper) {
                 enforceBlock(BlockDecision.Block(pkg, "Blocked by Strict Mode"))
                 return true
             }
@@ -310,7 +346,7 @@ class BlockerAccessibilityService : AccessibilityService() {
             return true
         }
         // Tamper screens always eject, even mid-grace.
-        if (SettingsGuard.isDangerous(titles)) {
+        if (tamper) {
             settingsGate.clear()
             ejectToAllowedSettings(pkg)
             return true
@@ -330,6 +366,28 @@ class BlockerAccessibilityService : AccessibilityService() {
         settingsGate.clear()
         ejectToAllowedSettings(pkg)
         return true
+    }
+
+    /**
+     * Collect the active window's node text + whether it has any toggle, for [SettingsGuard] to
+     * classify. Bounded DFS so a pathological tree can't stall the event thread. Returns lowercased
+     * text/content-descriptions and a hasToggle flag.
+     */
+    private fun scanActiveWindow(): Pair<List<String>, Boolean> {
+        val root = rootInActiveWindow ?: return emptyList<String>() to false
+        val texts = ArrayList<String>(64)
+        var hasToggle = false
+        val stack = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+        stack.addLast(root)
+        var budget = 800
+        while (stack.isNotEmpty() && budget-- > 0) {
+            val n = stack.removeLast()
+            n.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { texts.add(it.lowercase()) }
+            n.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { texts.add(it.lowercase()) }
+            if (n.isCheckable) hasToggle = true
+            for (i in 0 until n.childCount) n.getChild(i)?.let { stack.addLast(it) }
+        }
+        return texts to hasToggle
     }
 
     /**
@@ -418,5 +476,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         const val SYSTEM_UI_PKG = "com.android.systemui"
         /** Coalesce a burst of Settings window events into a single eject (see [ejectToAllowedSettings]). */
         const val SETTINGS_EJECT_DEBOUNCE_MS = 1_200L
+        /** Min gap between node-tree re-scans on a guarded screen's content-changed event stream. */
+        const val SETTINGS_SCAN_THROTTLE_MS = 350L
     }
 }

@@ -3,36 +3,43 @@ package com.customblocker.service.accessibility
 import android.provider.Settings
 
 /**
- * Strict Mode L3 anti-tamper (PLAN.md §11), scoped to Pixel/AOSP. While L3 is active and locked, we
- * keep the user out of the screens they'd use to undo blocking:
- *  - the device **Settings** app (disable accessibility, force-stop, remove device admin), and
- *  - the **package installer** (uninstall / permission screens) — defence-in-depth alongside the L2
- *    device-admin uninstall block.
+ * Strict Mode L3 anti-tamper (PLAN.md §11). While L3 is active and locked, we keep the user out of
+ * the screens they'd use to undo blocking — but *surgically*, so the rest of the device stays usable.
  *
- * The installer is blocked outright. Settings is gated through an "Allowed Settings" launcher
- * ([com.customblocker.ui.settings.AllowedSettingsActivity]): opening Settings while locked pops that
- * menu instead of the real app, and tapping an allowed shortcut deep-links into the real screen and
- * opens a short permit ([SettingsAccessGate]) so the user isn't ejected while they're in there.
+ * Window titles are an unreliable signal on modern Android (Settings Panel Architecture reports
+ * generic titles like "Settings", and window-state events often carry a transient like an icon's
+ * content-description), so detection is driven by the **active window's node tree** plus the window
+ * **class**, not titles:
+ *  - **Our app is the subject** of a Settings/installer screen (its App info / our uninstall dialog):
+ *    our label/package appears together with single-app action controls → eject. Merely seeing our
+ *    name as one row in the all-apps list (no action controls / no toggle) does NOT eject, so other
+ *    apps stay fully manageable.
+ *  - **Capability-granting list screens** (Accessibility, Notification access, Device admin, Special
+ *    app access, Developer options, Date & time, Reset, Users) — toggling our row there disables us
+ *    and our row may be scrolled off-screen, so these are ejected wholesale by their window class.
  *
- * We can't reliably whitelist *which* Settings screen is showing (AOSP fires generic `FrameLayout`
- * classNames and locale-dependent titles), so the permit — not title-matching — is what keeps the
- * allowed screen usable. Title-matching survives only as a [isDangerous] backstop: even while
- * permitted, screens that can disable the blocker (Accessibility, Apps/force-stop, Device admin,
- * Security, Developer options, Reset, Date & time) eject the user back to the menu.
+ * Titles survive only as an extra app-agnostic backstop ([isDangerous]); they never widen blocking to
+ * other apps' screens.
  */
 object SettingsGuard {
 
     const val SETTINGS_PKG = "com.android.settings"
 
-    /** Packages the L3 guard inspects at all. */
+    /**
+     * Packages the L3 guard inspects. The installers are guarded so *our* uninstall dialog is caught
+     * (defence-in-depth alongside the L2 device-admin uninstall block); other apps' uninstalls are
+     * left alone. The permission controller is intentionally NOT guarded — revoking a runtime
+     * permission can't disable the blocker (we rely on accessibility / notification-listener / device
+     * admin / overlay), and the user must stay able to manage other apps' permissions.
+     */
     val GUARDED_PACKAGES = setOf(
         SETTINGS_PKG,
         "com.android.packageinstaller",
         "com.google.android.packageinstaller",
-        "com.android.permissioncontroller",
     )
 
-    fun isInstaller(packageName: String): Boolean =
+    /** A single-app surface (installer dialog) we only act on when it concerns OUR app. */
+    fun isSingleAppSurface(packageName: String): Boolean =
         packageName != SETTINGS_PKG && packageName in GUARDED_PACKAGES
 
     /**
@@ -48,33 +55,60 @@ object SettingsGuard {
     }
 
     /**
-     * Screens that can be used to disable the blocker — ejected even while a permit is held. Matched
-     * as normalized-title substrings; deliberately broad since the cost of a false positive (bounce
-     * to the menu) is low and the cost of a miss (escape) defeats Strict Mode.
+     * Window-class fragments for capability-granting LIST screens, ejected wholesale (our row there
+     * disables us and may be scrolled off-screen). Matched as lowercase substrings of the window
+     * class name. Deliberately broad — these are system surfaces, not per-app management, so ejecting
+     * the whole screen never blocks managing *other* apps.
+     */
+    private val CAPABILITY_CLASS_MARKERS = listOf(
+        "accessibilitysettings", "accessibilitydetails",
+        "notificationaccess", "zenaccess",
+        "usageaccess",
+        "deviceadmin",
+        "specialaccess", "specialappaccess",
+        "developmentsettings", "developeroption",
+        "datetimesettings",
+        "resetdashboard", "factoryreset", "resetapppref",
+        "usersettings", "userssettings",
+        "overlaysettings", "drawoverlay",
+    )
+
+    /** Single-app action controls present only on an app's detail page (never on the app list). */
+    private val SINGLE_APP_ACTIONS = listOf(
+        "force stop", "uninstall", "disable", "clear data", "clear storage", "storage & cache",
+    )
+
+    /**
+     * Headings that identify a capability LIST screen when seen in the node tree (more reliable than
+     * the window class, which sometimes arrives as a generic FrameLayout). Only treated as a tamper
+     * screen when the screen also has a toggle — so the Settings home, which merely *lists* these as
+     * navigation entries (no toggles), is never falsely caught. Specific phrases only, so they don't
+     * appear on innocuous toggle screens like Display.
+     */
+    private val CAPABILITY_TEXT_MARKERS = listOf(
+        "usage access",
+        "device admin",
+        "notification access",
+        "special app access",
+        "display over other apps",
+        "modify system settings",
+        "install unknown apps",
+    )
+
+    /**
+     * App-agnostic tamper titles kept ONLY as an extra backstop. None of these are per-app management
+     * terms, so matching them never blocks another app's settings — they only add a second chance to
+     * catch a system disable-surface if the class signal is missed.
      */
     private val DANGEROUS_SUBSTRINGS = listOf(
         "accessibility",
-        // App management — the route to force-stop / clear-data / uninstall / per-app battery + the
-        // app list itself ("Apps" on One UI). Broad on purpose: over-ejecting here is harmless.
-        "apps", "app info", "app details", "all apps", "installed apps", "manage apps", "default apps",
-        "force stop", "uninstall", "clear data", "clear storage",
         "device admin",
-        "security", "encrypt",
         "developer option",
-        "reset", "erase",
         "date & time", "date and time",
-        "fingerprint", "face", "biometric",
-        "lock screen", "screen lock",
-        // Special-app-access umbrella + its leaves: each can directly cripple the blocker
-        // (revoke notification access, kill us via battery restriction, disable overlay, etc.).
         "special app access", "special access",
-        "notification access", "device & app notification", "notification listener",
+        "notification access", "notification listener", "device & app notification",
         "usage access",
         "display over other apps", "appear on top", "draw over",
-        "modify system settings",
-        "install unknown apps", "unknown sources",
-        "battery", "power",
-        // Adding a second user / guest is a classic way to reach uninstall around the lock.
         "users", "guest", "add user", "multiple users",
     )
 
@@ -111,12 +145,42 @@ object SettingsGuard {
     fun hasNoTitle(titles: List<CharSequence>): Boolean =
         titles.map(::normalize).none { it.isNotEmpty() }
 
-    /**
-     * True if the current Settings screen is a tamper surface that must eject the user even while a
-     * permit is held. [titles] is the window-state-changed event text.
-     */
+    /** App-agnostic title backstop (see [DANGEROUS_SUBSTRINGS]). */
     fun isDangerous(titles: List<CharSequence>): Boolean {
         val norm = titles.map(::normalize).filter { it.isNotEmpty() }
         return norm.any { t -> DANGEROUS_SUBSTRINGS.any { t.contains(it) } }
+    }
+
+    /** True if any collected node text/description names our app (label or package). */
+    fun mentionsSelf(texts: List<String>, selfPackage: String, selfLabel: String): Boolean {
+        val label = selfLabel.lowercase()
+        return texts.any { it.contains(selfPackage) || (label.isNotBlank() && it.contains(label)) }
+    }
+
+    /**
+     * The core node-tree verdict for a Settings screen: should we eject?
+     *  - a capability list (by window class) → yes, wholesale;
+     *  - our app's detail page (our identity + a single-app action control) → yes;
+     *  - our row visible on a per-app toggle list (our identity + a toggle) → yes;
+     *  - otherwise (incl. our name as a plain row in the all-apps list) → no.
+     *
+     * [texts] must be lowercased node text/content-descriptions; [hasToggle] true if any node is
+     * checkable; [className] the active window's class name.
+     */
+    fun isTamperScreen(
+        className: String?,
+        texts: List<String>,
+        hasToggle: Boolean,
+        selfPackage: String,
+        selfLabel: String,
+    ): Boolean {
+        val cls = className?.lowercase().orEmpty()
+        if (CAPABILITY_CLASS_MARKERS.any { cls.contains(it) }) return true
+        // Capability list identified by its heading in the node tree (class can be a generic
+        // FrameLayout). Gated by hasToggle so the Settings home — which only lists these — is exempt.
+        if (hasToggle && texts.any { t -> CAPABILITY_TEXT_MARKERS.any { t.contains(it) } }) return true
+        if (!mentionsSelf(texts, selfPackage, selfLabel)) return false
+        if (texts.any { t -> SINGLE_APP_ACTIONS.any { t.contains(it) } }) return true
+        return hasToggle
     }
 }
