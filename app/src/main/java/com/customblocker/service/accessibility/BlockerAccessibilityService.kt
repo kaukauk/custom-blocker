@@ -354,17 +354,29 @@ class BlockerAccessibilityService : AccessibilityService() {
             return true
         }
         // On an allowed screen (or one of its children) → keep the permit alive, let them stay.
-        if (SettingsGuard.isAllowed(titles)) {
+        // Classified from the node tree (not just the title) so a legit allowed screen that reports a
+        // blank title still confirms instead of being ejected.
+        if (SettingsGuard.isAllowedScreen(titles, texts)) {
             settingsGate.touch(now)
             return false
+        }
+        // Roamed to the Settings home or another top-level hub — the way users climb back to the
+        // capability screens. These report a blank/generic title, so we detect them by their node tree
+        // and eject HARD (even mid-grace), which is what keeps allow-list confinement strong.
+        if (SettingsGuard.isForeignArea(texts)) {
+            settingsGate.clear()
+            ejectToAllowedSettings(pkg)
+            resetSettingsApp()
+            return true
         }
         // Just tapped a shortcut: the deep-link briefly shows the home/loading frames. Don't treat
         // that as roaming — let it settle until the allowed screen surfaces.
         if (settingsGate.inGrace(now)) return false
-        // A transient/sub-window with no title we can classify (e.g. a dialog over the allowed
-        // screen). Leave the user where they are rather than risk a false eject.
-        if (SettingsGuard.hasNoTitle(titles)) return false
-        // A recognised OTHER screen (Settings home, Display, …): roamed off the allowed area → eject.
+        // A genuinely empty/transient window we can't classify at all (no title AND no node text,
+        // e.g. a momentary sub-window). Leave the user where they are rather than risk a false eject;
+        // a populated-but-unrecognised screen falls through to the eject below.
+        if (texts.isEmpty() && SettingsGuard.hasNoTitle(titles)) return false
+        // Any other populated, unrecognised screen: roamed off the allowed area → eject.
         settingsGate.clear()
         ejectToAllowedSettings(pkg)
         return true

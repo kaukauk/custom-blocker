@@ -124,13 +124,33 @@ object SettingsGuard {
     private val ALLOWED_SUBSTRINGS = listOf(
         // Wi-Fi & internet
         "wi-fi", "wifi", "internet", "network", "hotspot", "tethering",
-        // Bluetooth
-        "bluetooth", "paired", "previously connected",
+        // Bluetooth (AOSP routes the Bluetooth shortcut to the "Connected devices" dashboard)
+        "bluetooth", "paired", "previously connected", "connected device",
         // Language & input
         "language", "input", "keyboard", "spell", "dictionary", "text-to-speech", "speech",
         "pointer speed",
         // Sound & vibration
         "sound", "volume", "ringtone", "vibrat", "audio", "do not disturb",
+    )
+
+    /**
+     * Markers of NON-allowed Settings areas — the home dashboard and other top-level hubs the user
+     * must not climb to. Chosen to be exclusive to those screens: none of these ever appears in the
+     * node tree of an allowed area (Wi-Fi/internet, Bluetooth, Language & input, Sound & vibration),
+     * so spotting one means the user has roamed out of confinement. This is what makes allow-list mode
+     * strong: modern Android (and OneUI) reports the Settings home with a blank/generic *title*, but
+     * its node *tree* always lists these — so we eject on the tree even when the title tells us nothing.
+     */
+    private val FOREIGN_AREA_MARKERS = listOf(
+        "battery", "storage",
+        "about phone", "about device", "about emulated", "about tablet",
+        "digital wellbeing", "wallpaper", "device care",
+        "software update", "system update",
+        "safety & emergency", "safety and emergency",
+        "tips & support", "tips and support",
+        "advanced features",            // OneUI hub
+        "general management",           // OneUI hub
+        "lock screen", "home screen",
     )
 
     /** Lowercase, collapse the various unicode hyphens AOSP uses ("Wi‑Fi") to a plain '-'. */
@@ -142,6 +162,28 @@ object SettingsGuard {
         val norm = titles.map(::normalize).filter { it.isNotEmpty() }
         if (norm.isEmpty()) return false   // nothing to classify — caller decides (transient window)
         return norm.all { t -> ALLOWED_SUBSTRINGS.any { t.contains(it) } }
+    }
+
+    /**
+     * True if the node tree shows a NON-allowed Settings hub (home / dashboard) — see
+     * [FOREIGN_AREA_MARKERS]. Driven by the node tree (always populated) rather than the title (often
+     * blank on these screens), so the allow-list confinement holds even when titles tell us nothing.
+     * [texts] must be lowercased node text/content-descriptions.
+     */
+    fun isForeignArea(texts: List<String>): Boolean =
+        texts.any { t -> FOREIGN_AREA_MARKERS.any { t.contains(it) } }
+
+    /**
+     * Allow-list verdict for a whole screen, robust to blank titles. Allowed when the *title* is fully
+     * within an allowed area ([isAllowed]) OR the node *tree* names an allowed area and shows no
+     * foreign hub ([isForeignArea]). The foreign exclusion is what stops the Settings home — whose
+     * tree contains "Network & internet" (an allowed substring) yet also "Battery"/"Storage" — from
+     * being mistaken for an allowed screen.
+     */
+    fun isAllowedScreen(titles: List<CharSequence>, texts: List<String>): Boolean {
+        if (isAllowed(titles)) return true
+        if (isForeignArea(texts)) return false
+        return texts.any { t -> ALLOWED_SUBSTRINGS.any { t.contains(it) } }
     }
 
     /** True if the event carried no usable title text (a transient/sub-window we can't classify). */

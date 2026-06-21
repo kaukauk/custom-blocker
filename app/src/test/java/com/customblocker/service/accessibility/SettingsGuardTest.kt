@@ -119,6 +119,46 @@ class SettingsGuardTest {
         assertFalse(SettingsGuard.isAllowed(emptyList()))
     }
 
+    // --- allow-list confinement: foreign hubs (the leak the user hit on the S20) ---
+
+    // The Settings home dashboard — even with a blank title — is recognised by its node tree and
+    // treated as a foreign hub, so it can't be used to climb back to the capability screens.
+    @Test fun foreignArea_catchesSettingsHomeByNodeTree() {
+        val home = listOf("network & internet", "connected devices", "apps", "notifications",
+            "battery", "storage", "sound & vibration", "display", "about phone")
+        assertTrue(SettingsGuard.isForeignArea(home))
+        // With a blank title, the whole-screen verdict must still classify it as NOT allowed.
+        assertFalse(SettingsGuard.isAllowedScreen(emptyList(), home))
+    }
+
+    // OneUI top-level hubs are foreign too (different labels, same intent).
+    @Test fun foreignArea_catchesOneUiHubs() {
+        assertTrue(SettingsGuard.isForeignArea(listOf("advanced features")))
+        assertTrue(SettingsGuard.isForeignArea(listOf("general management")))
+        assertTrue(SettingsGuard.isForeignArea(listOf("battery and device care")))
+        assertTrue(SettingsGuard.isForeignArea(listOf("software update")))
+    }
+
+    // Allowed screens are NOT foreign and stay usable even when the title arrives blank — the node
+    // tree alone confirms them (so the strict eject doesn't false-trigger on the allowed area).
+    @Test fun allowedScreen_confirmedByNodeTreeWhenTitleBlank() {
+        val wifi = listOf("wi-fi", "homenet", "guestnet", "add network", "saved networks",
+            "network preferences")
+        assertFalse(SettingsGuard.isForeignArea(wifi))
+        assertTrue(SettingsGuard.isAllowedScreen(emptyList(), wifi))
+
+        val sound = listOf("media volume", "call volume", "ring volume", "phone ringtone",
+            "default notification sound", "vibration & haptics")
+        assertFalse(SettingsGuard.isForeignArea(sound))
+        assertTrue(SettingsGuard.isAllowedScreen(emptyList(), sound))
+    }
+
+    // Title-based allow still works (children with clean titles, e.g. ringtone picker).
+    @Test fun allowedScreen_confirmedByTitle() {
+        assertTrue(SettingsGuard.isAllowedScreen(listOf("Phone ringtone"), emptyList()))
+        assertTrue(SettingsGuard.isAllowedScreen(listOf("Saved networks"), emptyList()))
+    }
+
     @Test fun hasNoTitle_onlyForBlank() {
         assertTrue(SettingsGuard.hasNoTitle(emptyList()))
         assertTrue(SettingsGuard.hasNoTitle(listOf("", "  ")))
