@@ -76,6 +76,36 @@ object SettingsGuard {
         "overlaysettings", "drawoverlay",
     )
 
+    /**
+     * Identity-confirmation surfaces (PIN / pattern / password / fingerprint) — e.g. a payment app
+     * asking the user to verify themselves. On Android these are commonly hosted by
+     * `com.android.settings` (ConfirmDeviceCredential / ConfirmLockPassword|Pattern), so the L3 guard
+     * would otherwise eject them. They expose no capability toggles and return straight to their
+     * caller, so they can't be used to disable the blocker — hence they're exempt. Matched as
+     * lowercase substrings of the window class name.
+     */
+    private val AUTH_CONFIRM_CLASS_MARKERS = listOf(
+        "confirmdevicecredential",
+        "confirmlockpassword",
+        "confirmlockpattern",
+        "confirmcredential",
+        "biometricprompt",
+    )
+
+    /**
+     * Credential-entry phrasing, a backstop for [isAuthConfirmation] when the class isn't available
+     * (the confirm screen's content-changed re-scans arrive with a generic view class). Specific to
+     * identity entry, so they don't appear on capability screens.
+     */
+    private val AUTH_CONFIRM_TEXT_MARKERS = listOf(
+        "enter your pin", "confirm your pin", "enter pin",
+        "enter your password", "confirm your password",
+        "draw your pattern", "enter your pattern", "confirm your pattern",
+        "use your fingerprint", "use fingerprint", "touch the fingerprint sensor",
+        "verify it's you", "verify its you", "verify your identity",
+        "confirm it's you", "confirm its you",
+    )
+
     /** Single-app action controls present only on an app's detail page (never on the app list). */
     private val SINGLE_APP_ACTIONS = listOf(
         "force stop", "uninstall", "disable", "clear data", "clear storage", "storage & cache",
@@ -189,6 +219,17 @@ object SettingsGuard {
     /** True if the event carried no usable title text (a transient/sub-window we can't classify). */
     fun hasNoTitle(titles: List<CharSequence>): Boolean =
         titles.map(::normalize).none { it.isNotEmpty() }
+
+    /**
+     * True if this screen is an identity/biometric confirmation (see [AUTH_CONFIRM_CLASS_MARKERS] /
+     * [AUTH_CONFIRM_TEXT_MARKERS]) — must never be ejected/blocked, or Strict Mode breaks unrelated
+     * authentication (e.g. a payment app's fingerprint prompt). [texts] must be lowercased node text.
+     */
+    fun isAuthConfirmation(className: String?, texts: List<String>): Boolean {
+        val cls = className?.lowercase().orEmpty()
+        if (AUTH_CONFIRM_CLASS_MARKERS.any { cls.contains(it) }) return true
+        return texts.any { t -> AUTH_CONFIRM_TEXT_MARKERS.any { t.contains(it) } }
+    }
 
     /** App-agnostic title backstop (see [DANGEROUS_SUBSTRINGS]). */
     fun isDangerous(titles: List<CharSequence>): Boolean {

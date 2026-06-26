@@ -113,6 +113,12 @@ class BlockerAccessibilityService : AccessibilityService() {
     private var lastSettingsEjectMs: Long = 0L
     /** Throttle for re-scanning a guarded Settings screen on its (frequent) content-changed events. */
     private var lastSettingsScanMs: Long = 0L
+    /**
+     * While set (elapsedRealtime), an identity-confirmation screen is on top and the Settings guard is
+     * suspended so it isn't ejected. Bridges the confirm screen's content-changed re-scans (which lose
+     * the activity class); cleared on leaving the guarded packages. See [SettingsGuard.isAuthConfirmation].
+     */
+    private var authExemptUntilMs: Long = 0L
     /** Our own app label ("Custom Blocker"), used to spot screens that are about US in the node tree. */
     private var selfLabel: String = ""
 
@@ -198,7 +204,10 @@ class BlockerAccessibilityService : AccessibilityService() {
                     if (pkg != SettingsGuard.SETTINGS_PKG) settingsGate.clear()
                     // Left the guarded surfaces entirely → reset the eject debounce so reopening
                     // Settings later ejects immediately rather than being swallowed.
-                    if (pkg !in SettingsGuard.GUARDED_PACKAGES) lastSettingsEjectMs = 0L
+                    if (pkg !in SettingsGuard.GUARDED_PACKAGES) {
+                        lastSettingsEjectMs = 0L
+                        authExemptUntilMs = 0L   // left the guarded surfaces → end any auth exemption
+                    }
 
                     accrueUsage()                 // finalize the previous app's foreground time
                     trackedPkg = pkg
@@ -328,6 +337,20 @@ class BlockerAccessibilityService : AccessibilityService() {
             L.d(L.ENGINE, "settings-scan pkg=$pkg cls=$className tamper=$tamper toggle=$hasToggle titles=$titles")
         }
 
+        // Identity/biometric confirmation (e.g. a payment app's fingerprint/PIN prompt) can be hosted
+        // by com.android.settings (ConfirmDeviceCredential / ConfirmLock*). It can't reach any
+        // capability screen and returns to its caller, so never eject/block it — otherwise Strict Mode
+        // breaks unrelated authentication. Held for a short grace so it survives the confirm screen's
+        // content-changed re-scans (which lose the activity class), but never shields a tamper screen.
+        if (!tamper) {
+            val nowEl = SystemClock.elapsedRealtime()
+            if (SettingsGuard.isAuthConfirmation(className, texts)) {
+                authExemptUntilMs = nowEl + AUTH_EXEMPT_MS
+                return false
+            }
+            if (nowEl < authExemptUntilMs) return false
+        }
+
         // Block-list mode: Settings stays freely usable; only tamper screens eject (straight to home).
         if (strictConfig.settingsGuardMode == SettingsGuardMode.BLOCK_RISKY) {
             if (tamper) {
@@ -343,6 +366,11 @@ class BlockerAccessibilityService : AccessibilityService() {
         // back to the launcher.
         val now = System.currentTimeMillis()
         if (!settingsGate.isPermitted(now)) {
+            // A momentary empty/unclassifiable loading frame (Settings emits one while a screen
+            // attaches). Don't eject on it — wait for the populated event so an identity-confirmation
+            // screen can be recognised (above) instead of being kicked out on its first blank frame.
+            // The next event classifies it (real Settings → eject; auth → exempt).
+            if (texts.isEmpty() && SettingsGuard.hasNoTitle(titles)) return false
             ejectToAllowedSettings(pkg)
             return true
         }
@@ -512,6 +540,8 @@ class BlockerAccessibilityService : AccessibilityService() {
         const val SETTINGS_EJECT_DEBOUNCE_MS = 1_200L
         /** Min gap between node-tree re-scans on a guarded screen's content-changed event stream. */
         const val SETTINGS_SCAN_THROTTLE_MS = 350L
+        /** How long an identity-confirmation screen suspends the Settings guard (bridges re-scans). */
+        const val AUTH_EXEMPT_MS = 8_000L
         /** Delay before resetting Settings after an eject, so it's backgrounded first (killable). */
         const val SETTINGS_RESET_DELAY_MS = 400L
     }

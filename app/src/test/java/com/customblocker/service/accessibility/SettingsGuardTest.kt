@@ -159,6 +159,36 @@ class SettingsGuardTest {
         assertTrue(SettingsGuard.isAllowedScreen(listOf("Saved networks"), emptyList()))
     }
 
+    // --- identity/biometric confirmation exemption (payment fingerprint/PIN under Strict Mode) ---
+
+    // Confirm screens hosted by com.android.settings are recognised by class, so they're never ejected.
+    @Test fun authConfirmation_byClass() {
+        assertTrue(SettingsGuard.isAuthConfirmation(
+            "com.android.settings.password.ConfirmDeviceCredentialActivity", emptyList()))
+        assertTrue(SettingsGuard.isAuthConfirmation(
+            "com.android.settings.password.ConfirmLockPassword", emptyList()))
+        assertTrue(SettingsGuard.isAuthConfirmation(
+            "com.android.settings.password.ConfirmLockPattern", emptyList()))
+    }
+
+    // The class is lost on the confirm screen's content-changed re-scans (generic view), so the
+    // credential-entry text is a backstop.
+    @Test fun authConfirmation_byText() {
+        assertTrue(SettingsGuard.isAuthConfirmation("android.widget.FrameLayout",
+            listOf("enter your pin", "cancel")))
+        assertTrue(SettingsGuard.isAuthConfirmation("android.widget.FrameLayout",
+            listOf("verify it's you", "use fingerprint")))
+    }
+
+    // A real capability/tamper screen is NOT mistaken for an auth confirmation.
+    @Test fun authConfirmation_notTriggeredByCapabilityScreens() {
+        assertFalse(SettingsGuard.isAuthConfirmation(
+            "com.android.settings.Settings\$AccessibilitySettingsActivity",
+            listOf("accessibility", "custom blocker")))
+        assertFalse(SettingsGuard.isAuthConfirmation("android.widget.FrameLayout",
+            listOf("network & internet", "battery", "storage")))
+    }
+
     @Test fun hasNoTitle_onlyForBlank() {
         assertTrue(SettingsGuard.hasNoTitle(emptyList()))
         assertTrue(SettingsGuard.hasNoTitle(listOf("", "  ")))
