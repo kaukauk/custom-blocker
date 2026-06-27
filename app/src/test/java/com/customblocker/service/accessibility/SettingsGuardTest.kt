@@ -200,6 +200,20 @@ class SettingsGuardTest {
             listOf("network & internet", "battery", "storage")))
     }
 
+    // The Privacy leaf (Settings > Security and privacy > Privacy) links to the permission manager
+    // and the accessibility special-access list, so it ejects; the Security & privacy hub above it
+    // (which only navigates) stays usable.
+    @Test fun privacyLeaf_ejects_butSecurityPrivacyHubAllowed() {
+        val privacy = listOf("privacy", "permission manager", "accessibility special access",
+            "camera access", "microphone access", "alert when clipboard accessed")
+        assertTrue(SettingsGuard.isTamperScreen("com.android.settings.SubSettings", privacy, true, PKG, LABEL))
+
+        val hub = listOf("security and privacy", "lock screen", "accounts", "find my mobile",
+            "app security", "updates", "privacy", "security", "biometrics", "secure folder")
+        assertFalse(SettingsGuard.isTamperScreen("com.android.settings.SubSettings", hub, false, PKG, LABEL))
+        assertFalse(SettingsGuard.isTamperScreen("com.android.settings.SubSettings", hub, true, PKG, LABEL))
+    }
+
     @Test fun hasNoTitle_onlyForBlank() {
         assertTrue(SettingsGuard.hasNoTitle(emptyList()))
         assertTrue(SettingsGuard.hasNoTitle(listOf("", "  ")))

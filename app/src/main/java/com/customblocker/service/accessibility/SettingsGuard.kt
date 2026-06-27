@@ -140,6 +140,12 @@ object SettingsGuard {
         "display over other apps",
         "modify system settings",
         "install unknown apps",
+        // The Privacy page (Settings > Security and privacy > Privacy) links straight to the
+        // permission manager and an "Accessibility special access" list — a back-door to the
+        // accessibility grant. These phrases are unique to that leaf, not the Security & privacy
+        // hub above it (which only navigates), so blocking them leaves the hub usable.
+        "permission manager",
+        "accessibility special access",
     )
 
     /**
