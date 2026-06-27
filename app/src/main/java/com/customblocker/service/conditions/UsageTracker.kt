@@ -59,18 +59,26 @@ class UsageTracker @Inject constructor(
     }
 
     /**
-     * Add [seconds] of foreground use of [pkg] to every matching usage-limited profile — but only
-     * while that profile is actually applicable ([ConditionEvaluator.isApplicable]): enabled, not
-     * paused, and within its schedule/Wi-Fi/location/charging conditions. Outside that, watching
-     * shouldn't burn the allowance, so we don't count it.
+     * Add [seconds] of foreground use of [pkg] (optionally showing [url] in a browser) to every
+     * matching usage-limited profile — but only while that profile is actually applicable
+     * ([ConditionEvaluator.isApplicable]): enabled, not paused, and within its
+     * schedule/Wi-Fi/location/charging conditions. Outside that, watching shouldn't burn the
+     * allowance, so we don't count it.
+     *
+     * A profile matches when it targets [pkg] as an app OR — for a browser — [url] hits one of its
+     * website rules. The latter makes time spent on a blocked site in a browser count toward the
+     * profile's limit (e.g. "5 min/hour"), so the site is blocked once the allowance is spent, the
+     * same way an app would be.
      */
-    fun addUsage(pkg: String, seconds: Int, ctx: BlockContext) {
+    fun addUsage(pkg: String, url: String?, seconds: Int, ctx: BlockContext) {
         if (seconds <= 0) return
         engine.profiles.forEach { rule ->
             val spec = rule.usageLimit ?: return@forEach
             // Count the apps this profile actually targets — for an allow list that's the apps NOT
-            // in the list, so `pkg in apps` would wrongly accumulate nothing and never block.
-            if (!rule.targets(pkg)) return@forEach
+            // in the list, so `pkg in apps` would wrongly accumulate nothing and never block — plus
+            // time on any of its blocked websites when the current page matches.
+            val matchesSite = url != null && rule.websites.any { it.matches(url) }
+            if (!rule.targets(pkg) && !matchesSite) return@forEach
             if (!ConditionEvaluator.isApplicable(rule, ctx)) return@forEach
             resetIfNeeded(rule.id, usagePeriod, usedSeconds, periodIndex(spec.period))
             usedSeconds.merge(rule.id, seconds, Int::plus)

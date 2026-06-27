@@ -102,6 +102,14 @@ class BlockerAccessibilityService : AccessibilityService() {
     @Volatile private var screenOn: Boolean = true
     /** Last URL we evaluated, to skip re-evaluating unchanged content-changed spam. */
     private var lastUrl: String? = null
+    /**
+     * Sticky current-page URL for the foreground browser, used for usage accrual. Unlike [lastUrl]
+     * (which goes null the instant the URL bar leaves the tree — e.g. Chrome hides the toolbar on
+     * scroll, YouTube in fullscreen), this holds the last URL actually read and is only cleared when
+     * the foreground app changes. Without it, website time would accrue only on the rare frames the
+     * toolbar is visible.
+     */
+    private var trackedUrl: String? = null
     /** Package we last recorded a block for, to avoid re-counting the 3s ticker re-evaluations. */
     private var lastBlockedPkg: String? = null
     /**
@@ -159,7 +167,11 @@ class BlockerAccessibilityService : AccessibilityService() {
                 }
                 if (powerManager.isInteractive) {
                     accrueUsage()
-                    trackedPkg?.let { evaluate(it) }
+                    trackedPkg?.let { p ->
+                        // Re-check the current browser page too, so a website usage limit blocks
+                        // promptly once exhausted even if the page didn't change.
+                        if (!evaluate(p) && BrowserUrlReader.isKnownBrowser(p)) recheckBrowserUrl(p)
+                    }
                 }
             }
         }
@@ -181,6 +193,7 @@ class BlockerAccessibilityService : AccessibilityService() {
                     accrueUsage()
                     trackedPkg = null
                     lastUrl = null
+                    trackedUrl = null
                 }
                 overlay.hide()
             }
@@ -198,7 +211,6 @@ class BlockerAccessibilityService : AccessibilityService() {
                 if (maybeGuardSettings(pkg, event)) return
                 if (pkg != lastForeground) {
                     lastForeground = pkg
-                    lastUrl = null
                     lastBlockedPkg = null         // new foreground entry → a fresh block can count
                     // Left the Settings app → end any allowed-settings permit.
                     if (pkg != SettingsGuard.SETTINGS_PKG) settingsGate.clear()
@@ -210,6 +222,10 @@ class BlockerAccessibilityService : AccessibilityService() {
                     }
 
                     accrueUsage()                 // finalize the previous app's foreground time
+                    // Reset the tracked URLs only AFTER crediting the previous app's final segment, so
+                    // a browser's last bit of website time isn't lost on the switch away.
+                    lastUrl = null
+                    trackedUrl = null
                     trackedPkg = pkg
                     sinceMs = SystemClock.elapsedRealtime()
                     usageTracker.onLaunch(pkg, contextProvider.current())  // count a launch for launch-limited profiles
@@ -257,6 +273,9 @@ class BlockerAccessibilityService : AccessibilityService() {
     private fun evaluateUrl(pkg: String) {
         if (unlockActive()) return
         val url = BrowserUrlReader.readUrl(pkg, rootInActiveWindow)
+        // Remember the last real URL for accrual; a momentarily-hidden toolbar reads null but the user
+        // is still on the same page, so don't clear the sticky URL on null.
+        if (url != null) trackedUrl = url
         if (url == lastUrl) return
         lastUrl = url
         when (val decision = engine.decideUrl(pkg, url, contextProvider.current())) {
@@ -268,13 +287,30 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Re-apply website rules to the current page on the ticker, so a website usage limit blocks
+     * promptly once its allowance is spent even without a page change. Decides against the sticky
+     * [trackedUrl] (not a fresh read) so a hidden toolbar isn't mistaken for an unreadable URL.
+     */
+    private fun recheckBrowserUrl(pkg: String) {
+        if (unlockActive()) return
+        val url = trackedUrl ?: return
+        val decision = engine.decideUrl(pkg, url, contextProvider.current())
+        if (decision is BlockDecision.Block) {
+            L.d(L.URL, "BLOCK $pkg url=$url :: ${decision.reason}")
+            enforceBlock(decision)
+        }
+    }
+
     private fun accrueUsage() {
         val pkg = trackedPkg ?: return
         if (!screenOn) return   // don't bank time while the screen is off — elapsedRealtime spans sleep
         val now = SystemClock.elapsedRealtime()
         val seconds = ((now - sinceMs) / 1000L).toInt()
         if (seconds > 0) {
-            usageTracker.addUsage(pkg, seconds, contextProvider.current())
+            // trackedUrl is the sticky current page for trackedPkg (survives a hidden toolbar), so a
+            // browser's website-matched time is credited to the right profile's usage limit.
+            usageTracker.addUsage(pkg, trackedUrl, seconds, contextProvider.current())
             statsRecorder.recordUsage(pkg, seconds)
             sinceMs = now
         }
