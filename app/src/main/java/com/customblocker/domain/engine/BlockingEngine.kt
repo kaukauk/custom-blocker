@@ -60,6 +60,7 @@ class BlockingEngine @Inject constructor() {
         "com.samsung.android.app.taskedge",                 // Tasks edge panel
         "com.samsung.android.app.clipboardedge",            // Clipboard edge panel
         "com.samsung.android.incallui",                     // in-call screen (answer/ongoing calls)
+        "com.samsung.android.biometrics.app.setting",       // biometric (fingerprint/face) verify prompt
         // Emergency surfaces — must never be blocked (safety critical).
         "com.samsung.android.emergency",
         "com.sec.android.emergencylauncher",
