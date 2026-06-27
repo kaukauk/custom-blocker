@@ -60,7 +60,23 @@ class BlockingEngine @Inject constructor() {
         "com.samsung.android.app.taskedge",                 // Tasks edge panel
         "com.samsung.android.app.clipboardedge",            // Clipboard edge panel
         "com.samsung.android.incallui",                     // in-call screen (answer/ongoing calls)
-        "com.samsung.android.biometrics.app.setting",       // biometric (fingerprint/face) verify prompt
+        // Telephony / calling — answering and placing calls (incl. the emergency dialer) must never be
+        // blocked. The in-call UI is above; these are the backing telephony + telecom services and the
+        // Samsung dialer that hosts the incoming-call screen.
+        "com.android.phone",                                // telephony (calls, emergency dialer)
+        "com.android.server.telecom",                       // telecom call management / call UI
+        "com.samsung.android.dialer",                        // Samsung phone app (incoming-call screen)
+        // Captive-portal sign-in for joining Wi-Fi (the "log in to network" page) — needed to get
+        // online, and the user reaches it from the allowed Wi-Fi settings.
+        "com.android.captiveportallogin",
+        // Biometrics (fingerprint/face) — verify prompts and their backing services. These confirm
+        // identity and expose no capability that can disable the blocker, so an allow-list must never
+        // eject them (e.g. a payment app's fingerprint check). The AOSP/system prompt comes from
+        // com.android.systemui (already above).
+        "com.samsung.android.biometrics.app.setting",       // biometric verify prompt
+        "com.samsung.android.bio.face.service",             // face unlock service
+        "com.samsung.android.service.fingerprint",          // fingerprint service
+        "com.samsung.android.fingerprint",                  // fingerprint (older One UI)
         // Emergency surfaces — must never be blocked (safety critical).
         "com.samsung.android.emergency",
         "com.sec.android.emergencylauncher",
