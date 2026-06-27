@@ -331,7 +331,10 @@ class BlockerAccessibilityService : AccessibilityService() {
             return false
         }
 
-        val tamper = SettingsGuard.isTamperScreen(className, texts, hasToggle, packageName, selfLabel) ||
+        // A dedicated OEM capability package (e.g. com.samsung.accessibility) is a tamper surface in
+        // its entirety — eject it in either mode regardless of the (often generic) per-event class.
+        val tamper = pkg in SettingsGuard.CAPABILITY_PACKAGES ||
+            SettingsGuard.isTamperScreen(className, texts, hasToggle, packageName, selfLabel) ||
             SettingsGuard.isDangerous(titles)
         if (com.customblocker.BuildConfig.DEBUG) {
             L.d(L.ENGINE, "settings-scan pkg=$pkg cls=$className tamper=$tamper toggle=$hasToggle titles=$titles")
@@ -469,9 +472,11 @@ class BlockerAccessibilityService : AccessibilityService() {
         // no-op. A short delay lets the eject land first.
         scope.launch {
             delay(SETTINGS_RESET_DELAY_MS)
-            runCatching {
-                getSystemService(android.app.ActivityManager::class.java)
-                    ?.killBackgroundProcesses(SettingsGuard.SETTINGS_PKG)
+            val am = getSystemService(android.app.ActivityManager::class.java)
+            // Also tear down any OEM capability package (e.g. com.samsung.accessibility) so it can't be
+            // resumed from recents deep inside the Accessibility screen.
+            for (p in SettingsGuard.CAPABILITY_PACKAGES + SettingsGuard.SETTINGS_PKG) {
+                runCatching { am?.killBackgroundProcesses(p) }
             }
         }
     }

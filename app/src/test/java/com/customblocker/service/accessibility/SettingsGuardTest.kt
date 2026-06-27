@@ -22,6 +22,17 @@ class SettingsGuardTest {
         assertFalse(SettingsGuard.isSingleAppSurface("com.google.android.permissioncontroller"))
     }
 
+    // OEM capability packages (Samsung hosts Accessibility in its own package) are guarded, but as
+    // capability surfaces — NOT single-app installer surfaces — so they eject wholesale.
+    @Test fun samsungAccessibility_guardedAsCapabilityNotInstaller() {
+        assertTrue("com.samsung.accessibility" in SettingsGuard.GUARDED_PACKAGES)
+        assertFalse(SettingsGuard.isSingleAppSurface("com.samsung.accessibility"))
+        // Its activity class still matches the capability markers, so it ejects wholesale.
+        assertTrue(SettingsGuard.isTamperScreen(
+            "com.samsung.accessibility.homepage.AccessibilityHomepageActivity",
+            emptyList(), false, PKG, LABEL))
+    }
+
     @Test fun otherApps_notGuarded() {
         assertFalse("com.android.chrome" in SettingsGuard.GUARDED_PACKAGES)
         assertFalse(SettingsGuard.isSingleAppSurface("com.android.chrome"))

@@ -32,15 +32,29 @@ object SettingsGuard {
      * permission can't disable the blocker (we rely on accessibility / notification-listener / device
      * admin / overlay), and the user must stay able to manage other apps' permissions.
      */
+    /**
+     * Dedicated capability surfaces some OEMs split out of the main Settings app into their own
+     * package — e.g. Samsung hosts the Accessibility screen in `com.samsung.accessibility`, reachable
+     * by deep-link without passing through the (guarded) Settings home. Their whole purpose is granting
+     * a capability that can disable the blocker, so they're guarded and ejected wholesale like any
+     * capability list (their activity class still matches [CAPABILITY_CLASS_MARKERS]) — never treated
+     * as a per-app installer surface.
+     */
+    val CAPABILITY_PACKAGES: Set<String> = setOf(
+        "com.samsung.accessibility",
+    )
+
     val GUARDED_PACKAGES = setOf(
         SETTINGS_PKG,
         "com.android.packageinstaller",
         "com.google.android.packageinstaller",
-    )
+    ) + CAPABILITY_PACKAGES
 
     /** A single-app surface (installer dialog) we only act on when it concerns OUR app. */
     fun isSingleAppSurface(packageName: String): Boolean =
-        packageName != SETTINGS_PKG && packageName in GUARDED_PACKAGES
+        packageName != SETTINGS_PKG &&
+            packageName !in CAPABILITY_PACKAGES &&
+            packageName in GUARDED_PACKAGES
 
     /**
      * The curated shortcuts shown in the Allowed Settings launcher. [action] is a documented
