@@ -67,16 +67,18 @@ class BlockingEngine @Inject constructor() {
         "com.android.server.telecom",                       // telecom call management / call UI
         "com.samsung.android.dialer",                        // Samsung phone app (incoming-call screen)
         // Captive-portal sign-in for joining Wi-Fi (the "log in to network" page) — needed to get
-        // online, and the user reaches it from the allowed Wi-Fi settings.
+        // online, and the user reaches it from the allowed Wi-Fi settings. One UI ships the Google
+        // module; the AOSP package name is kept too for other devices.
+        "com.google.android.captiveportallogin",
         "com.android.captiveportallogin",
         // Biometrics (fingerprint/face) — verify prompts and their backing services. These confirm
         // identity and expose no capability that can disable the blocker, so an allow-list must never
-        // eject them (e.g. a payment app's fingerprint check). The AOSP/system prompt comes from
-        // com.android.systemui (already above).
-        "com.samsung.android.biometrics.app.setting",       // biometric verify prompt
-        "com.samsung.android.bio.face.service",             // face unlock service
-        "com.samsung.android.service.fingerprint",          // fingerprint service
-        "com.samsung.android.fingerprint",                  // fingerprint (older One UI)
+        // eject them (e.g. a payment app's fingerprint check). Fingerprint is hosted by the biometric
+        // settings prompt; the AOSP/system prompt comes from com.android.systemui (already above).
+        "com.samsung.android.biometrics.app.setting",       // biometric (fingerprint/face) verify prompt
+        "com.samsung.faceservice",                          // face recognition service
+        "com.samsung.android.smartface",                    // face unlock
+        "com.samsung.android.smartface.overlay",            // face unlock overlay
         // Emergency surfaces — must never be blocked (safety critical).
         "com.samsung.android.emergency",
         "com.sec.android.emergencylauncher",
