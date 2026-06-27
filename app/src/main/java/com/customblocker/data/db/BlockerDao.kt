@@ -61,6 +61,9 @@ interface BlockerDao {
     @Insert
     suspend fun addInterval(interval: TimeIntervalEntity)
 
+    @Query("UPDATE time_intervals SET fromMinuteOfDay = :fromMinuteOfDay, toMinuteOfDay = :toMinuteOfDay WHERE id = :id")
+    suspend fun updateInterval(id: Long, fromMinuteOfDay: Int, toMinuteOfDay: Int)
+
     @Query("DELETE FROM time_intervals WHERE id = :id")
     suspend fun removeInterval(id: Long)
 

@@ -89,6 +89,11 @@ class ConditionsViewModel @Inject constructor(
         repository.addTimeWindow(profileId, fromMinute, toMinute)
     }
 
+    fun updateTimeWindow(id: Long, fromMinute: Int, toMinute: Int) = viewModelScope.launch {
+        if (locked) return@launch
+        repository.updateTimeWindow(id, fromMinute, toMinute)
+    }
+
     fun removeInterval(id: Long) = viewModelScope.launch {
         if (locked) return@launch
         repository.removeInterval(id)

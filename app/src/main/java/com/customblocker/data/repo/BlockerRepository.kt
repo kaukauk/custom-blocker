@@ -157,6 +157,9 @@ class BlockerRepository @Inject constructor(
     suspend fun addTimeWindow(profileId: Long, fromMinuteOfDay: Int, toMinuteOfDay: Int) =
         dao.addInterval(TimeIntervalEntity(profileId = profileId, fromMinuteOfDay = fromMinuteOfDay, toMinuteOfDay = toMinuteOfDay))
 
+    suspend fun updateTimeWindow(id: Long, fromMinuteOfDay: Int, toMinuteOfDay: Int) =
+        dao.updateInterval(id, fromMinuteOfDay, toMinuteOfDay)
+
     suspend fun removeInterval(id: Long) = dao.removeInterval(id)
 
     suspend fun addWifi(profileId: Long, ssid: String) =

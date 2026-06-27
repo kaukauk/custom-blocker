@@ -40,6 +40,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -82,6 +83,8 @@ fun ConditionsScreen(
     // Time-window picker: 0 = closed, 1 = picking start, 2 = picking end.
     var pickerStage by remember { mutableIntStateOf(0) }
     var pendingStart by remember { mutableIntStateOf(0) }
+    // Id of the window being edited, or null when adding a new one.
+    var editingIntervalId by remember { mutableStateOf<Long?>(null) }
 
     fun toggleExpand(bit: Int) { expanded = if (expanded == bit) null else bit }
 
@@ -147,13 +150,27 @@ fun ConditionsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("${hhmm(interval.fromMinuteOfDay)} – ${hhmm(interval.toMinuteOfDay)}")
+                            // Tap the time to edit this window; pre-fills the picker with its values.
+                            Text(
+                                "${hhmm(interval.fromMinuteOfDay)} – ${hhmm(interval.toMinuteOfDay)}",
+                                Modifier
+                                    .weight(1f)
+                                    .clickable(enabled = !locked) {
+                                        editingIntervalId = interval.id
+                                        pendingStart = interval.fromMinuteOfDay
+                                        pickerStage = 1
+                                    }
+                                    .padding(vertical = 8.dp),
+                            )
                             IconButton(onClick = { viewModel.removeInterval(interval.id) }, enabled = !locked) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove window")
                             }
                         }
                     }
-                    OutlinedButton(onClick = { pickerStage = 1 }, enabled = !locked) { Text("Add time window") }
+                    OutlinedButton(
+                        onClick = { editingIntervalId = null; pickerStage = 1 },
+                        enabled = !locked,
+                    ) { Text("Add time window") }
                 }
             }
 
@@ -266,25 +283,39 @@ fun ConditionsScreen(
     }
 
     if (pickerStage > 0) {
-        val timeState = rememberTimePickerState(is24Hour = true)
-        AlertDialog(
-            onDismissRequest = { pickerStage = 0 },
-            title = { Text(if (pickerStage == 1) "Start time" else "End time") },
-            text = { TimePicker(state = timeState) },
-            confirmButton = {
-                TextButton(onClick = {
-                    val minute = timeState.hour * 60 + timeState.minute
-                    if (pickerStage == 1) {
-                        pendingStart = minute
-                        pickerStage = 2
-                    } else {
-                        viewModel.addTimeWindow(pendingStart, minute)
-                        pickerStage = 0
-                    }
-                }) { Text(if (pickerStage == 1) "Next" else "Add") }
-            },
-            dismissButton = { TextButton(onClick = { pickerStage = 0 }) { Text("Cancel") } },
-        )
+        fun closePicker() { pickerStage = 0; editingIntervalId = null }
+        val editing = state.intervals.find { it.id == editingIntervalId }
+        // Pre-fill: start from the window's existing start, end from its existing end (or, for a fresh
+        // second stage, just after the chosen start).
+        val initMinute = if (pickerStage == 1) (editing?.fromMinuteOfDay ?: 0) else (editing?.toMinuteOfDay ?: pendingStart)
+        // Re-create the picker state per stage/target so it adopts the right initial time.
+        key(pickerStage, editingIntervalId) {
+            val timeState = rememberTimePickerState(
+                initialHour = initMinute / 60,
+                initialMinute = initMinute % 60,
+                is24Hour = true,
+            )
+            AlertDialog(
+                onDismissRequest = { closePicker() },
+                title = { Text(if (pickerStage == 1) "Start time" else "End time") },
+                text = { TimePicker(state = timeState) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val minute = timeState.hour * 60 + timeState.minute
+                        if (pickerStage == 1) {
+                            pendingStart = minute
+                            pickerStage = 2
+                        } else {
+                            val id = editingIntervalId
+                            if (id != null) viewModel.updateTimeWindow(id, pendingStart, minute)
+                            else viewModel.addTimeWindow(pendingStart, minute)
+                            closePicker()
+                        }
+                    }) { Text(if (pickerStage == 1) "Next" else if (editingIntervalId != null) "Save" else "Add") }
+                },
+                dismissButton = { TextButton(onClick = { closePicker() }) { Text("Cancel") } },
+            )
+        }
     }
 }
 
