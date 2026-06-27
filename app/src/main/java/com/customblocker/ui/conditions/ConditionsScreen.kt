@@ -108,7 +108,7 @@ fun ConditionsScreen(
             item {
                 Text(
                     "This profile is active only when ALL switched-on conditions are met. Leave them all " +
-                        "off to apply all the time. Tap a condition to see what it does.",
+                        "off to apply all the time.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
