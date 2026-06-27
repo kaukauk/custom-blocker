@@ -46,6 +46,24 @@ class BlockingEngine @Inject constructor() {
         // user can't grant/deny permissions (and they pop up over other apps during normal use).
         "com.google.android.permissioncontroller",
         "com.android.permissioncontroller",
+        // The system "open with"/share chooser (A13+ moved it out of systemui) — blocking it breaks
+        // opening links/sharing from allowed apps.
+        "com.android.intentresolver",
+        // --- Samsung (One UI) system-UI surfaces that pop up during normal use; an allow-list that
+        // omits them would block recents, the Edge panel, the call screen, etc. (Home launchers,
+        // including com.sec.android.app.launcher which also provides recents, are resolved at runtime
+        // in resolveSystemPackages and don't need listing here.) ---
+        "com.sec.android.dexsystemui",                      // DeX system UI
+        "com.samsung.android.app.aodservice",               // Always On Display
+        "com.samsung.android.app.cocktailbarservice",       // Edge panel host
+        "com.samsung.android.app.appsedge",                 // Apps edge panel
+        "com.samsung.android.app.taskedge",                 // Tasks edge panel
+        "com.samsung.android.app.clipboardedge",            // Clipboard edge panel
+        "com.samsung.android.incallui",                     // in-call screen (answer/ongoing calls)
+        // Emergency surfaces — must never be blocked (safety critical).
+        "com.samsung.android.emergency",
+        "com.sec.android.emergencylauncher",
+        "com.sec.android.provider.emergencymode",
     )
 
     /**

@@ -495,8 +495,16 @@ class BlockerAccessibilityService : AccessibilityService() {
         // IMEs + SystemUI are transient overlays (drawn over the real app), not foreground switches.
         // The launcher is NOT included here: going home IS a real foreground change.
         transientOverlays = imes + SYSTEM_UI_PKG
+        // Every registered home launcher, not just the default: on Samsung the recents/overview UI is
+        // served by com.sec.android.app.launcher even when a third-party launcher is the active home,
+        // so an allow-list would otherwise block "recent apps". Settings registers a HOME fallback too
+        // — exclude it (it's governed by the Strict Mode guard, not the app allow-list).
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        packageManager.resolveActivity(home, 0)?.activityInfo?.packageName?.let { pkgs += it }
+        packageManager.queryIntentActivities(home, 0).forEach { ri ->
+            ri.activityInfo?.packageName
+                ?.takeIf { it != SettingsGuard.SETTINGS_PKG }
+                ?.let { pkgs += it }
+        }
         L.d(L.FG, "system never-block: $pkgs ; transient overlays: $transientOverlays")
         return pkgs
     }
