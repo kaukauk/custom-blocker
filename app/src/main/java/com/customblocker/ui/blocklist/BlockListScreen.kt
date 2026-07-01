@@ -16,6 +16,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
@@ -89,6 +91,7 @@ fun BlockListScreen(
 
     var blockedTab by remember { mutableIntStateOf(0) } // 0 = Apps, 1 = Websites, 2 = Keywords
     var showRename by remember { mutableStateOf(false) }
+    var uninstalledExpanded by remember { mutableStateOf(false) }
 
     if (showUnlock) {
         UnlockDialog(
@@ -266,7 +269,7 @@ fun BlockListScreen(
             // Blocked content tabs — counts in the label; no check tick (it implied "only this is blocked").
             item {
                 val tabs = listOf(
-                    "Apps (${state.apps.size})",
+                    "Apps (${state.apps.size + state.uninstalledApps.size})",
                     "Websites (${state.websites.size})",
                     "Keywords (${state.keywords.size})",
                 )
@@ -283,7 +286,7 @@ fun BlockListScreen(
             }
 
             when (blockedTab) {
-                0 -> appsTab(state, editLocked, allowlist, onAddApps, viewModel)
+                0 -> appsTab(state, editLocked, allowlist, onAddApps, viewModel, uninstalledExpanded) { uninstalledExpanded = !uninstalledExpanded }
                 1 -> websitesTab(state, editLocked, viewModel)
                 else -> keywordsTab(state, editLocked, viewModel)
             }
@@ -320,8 +323,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.appsTab(
     allowlist: Boolean,
     onAddApps: () -> Unit,
     viewModel: BlockListViewModel,
+    uninstalledExpanded: Boolean,
+    onToggleUninstalled: () -> Unit,
 ) {
-    if (state.apps.isEmpty()) {
+    if (state.apps.isEmpty() && state.uninstalledApps.isEmpty()) {
         item { Text("No apps yet.", style = MaterialTheme.typography.bodyMedium) }
     } else {
         items(state.apps, key = { "app:${it.packageName}" }) { app ->
@@ -337,6 +342,70 @@ private fun androidx.compose.foundation.lazy.LazyListScope.appsTab(
                     onClick = { viewModel.removeApp(app.packageName) },
                     enabled = !editLocked || allowlist,
                 ) { Icon(Icons.Default.Delete, contentDescription = "Remove") }
+            }
+        }
+    }
+    // Uninstalled-but-targeted apps: kept in the profile, tucked into a collapsible section so they
+    // don't clutter the list (they only resolve to a raw package name).
+    if (state.uninstalledApps.isNotEmpty()) {
+        item {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable { onToggleUninstalled() }
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    if (uninstalledExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (uninstalledExpanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Uninstalled apps (${state.uninstalledApps.size})",
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (uninstalledExpanded) {
+            items(state.uninstalledApps, key = { "uapp:${it.packageName}" }) { app ->
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val icon = app.icon
+                    if (icon != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small),
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.PhoneAndroid,
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(app.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "Not installed",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.removeApp(app.packageName) },
+                        enabled = !editLocked || allowlist,
+                    ) { Icon(Icons.Default.Delete, contentDescription = "Remove") }
+                }
             }
         }
     }

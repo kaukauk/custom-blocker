@@ -51,6 +51,13 @@ interface BlockerDao {
     @Query("DELETE FROM profile_apps WHERE profileId = :profileId AND packageName = :packageName")
     suspend fun removeApp(profileId: Long, packageName: String)
 
+    // --- app metadata cache (label + icon snapshot for uninstalled-app display) ---
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAppMeta(meta: AppMetaEntity)
+
+    @Query("SELECT * FROM app_meta WHERE packageName = :packageName")
+    suspend fun getAppMeta(packageName: String): AppMetaEntity?
+
     // --- time intervals ---
     @Query("SELECT * FROM time_intervals")
     fun observeAllIntervals(): Flow<List<TimeIntervalEntity>>

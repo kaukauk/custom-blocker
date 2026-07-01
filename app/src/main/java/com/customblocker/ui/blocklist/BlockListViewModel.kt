@@ -14,6 +14,7 @@ import com.customblocker.domain.strict.ProfileLockState
 import com.customblocker.ui.AppLister
 import com.customblocker.ui.InstalledApp
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -25,11 +26,21 @@ import javax.inject.Inject
 /** An active condition shown on the profile screen: its name + the variables the user set. */
 data class ConditionSummary(val bit: Int, val title: String, val detail: String)
 
+/** An uninstalled-but-targeted app, shown with its snapshotted real name + icon (not its package). */
+data class UninstalledApp(
+    val packageName: String,
+    val label: String,
+    val icon: androidx.compose.ui.graphics.ImageBitmap?,
+)
+
 data class BlockListUiState(
     val title: String = "",
     val enabled: Boolean = false,
     val mode: BlockingMode = BlockingMode.BLOCKLIST,
+    /** Installed apps targeted by this profile. */
     val apps: List<InstalledApp> = emptyList(),
+    /** Apps targeted by this profile that are no longer installed (kept, shown separately). */
+    val uninstalledApps: List<UninstalledApp> = emptyList(),
     /** Web address rules (DOMAIN/EXACT). */
     val websites: List<WebsiteEntity> = emptyList(),
     /** Keyword rules (KEYWORD). */
@@ -69,11 +80,23 @@ class BlockListViewModel @Inject constructor(
             rule,
         ) { profile, apps, sites, rule ->
             val keywordType = UrlMatchType.KEYWORD.ordinal
+            // Keep uninstalled-but-targeted apps in the profile, but split them out so the UI can show
+            // them in their own section (they only resolve to a raw package name).
+            val (installedRaw, uninstalledRaw) = apps.partition { lister.isInstalled(it.packageName) }
+            val installed = installedRaw
+                .map { InstalledApp(it.packageName, lister.label(it.packageName)) }
+            // For uninstalled apps, use the snapshot taken while they were installed (real name + icon),
+            // falling back to the package name if we never captured them.
+            val uninstalled = uninstalledRaw.map { e ->
+                val meta = repository.getAppMeta(e.packageName)
+                UninstalledApp(e.packageName, meta?.label ?: e.packageName, lister.decodeIcon(meta?.iconPng))
+            }.sortedBy { it.label.lowercase() }
             BlockListUiState(
                 title = profile?.title ?: "",
                 enabled = profile?.enabled ?: false,
                 mode = if (profile?.blockingMode == 1) BlockingMode.ALLOWLIST else BlockingMode.BLOCKLIST,
-                apps = apps.map { InstalledApp(it.packageName, lister.label(it.packageName)) },
+                apps = installed,
+                uninstalledApps = uninstalled,
                 websites = sites.filter { it.matchType != keywordType },
                 keywords = sites.filter { it.matchType == keywordType },
                 blockUnsupportedBrowsers = profile?.blockUnsupportedBrowsers ?: false,
@@ -82,6 +105,24 @@ class BlockListViewModel @Inject constructor(
                 conditions = summarizeConditions(rule),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BlockListUiState())
+
+    /** Packages whose meta we've already snapshotted this session, to avoid redundant re-encoding. */
+    private val snapshotted = mutableSetOf<String>()
+
+    init {
+        // While targeted apps are installed, snapshot their real name + icon so they keep displaying
+        // correctly after being uninstalled. Runs off the main thread; once per package per session.
+        viewModelScope.launch(Dispatchers.Default) {
+            repository.observeApps(profileId).collect { entities ->
+                entities.forEach { e ->
+                    if (e.packageName !in snapshotted && lister.isInstalled(e.packageName)) {
+                        snapshotted += e.packageName
+                        repository.cacheAppMeta(e.packageName, lister.label(e.packageName), lister.iconPng(e.packageName))
+                    }
+                }
+            }
+        }
+    }
 
     private fun summarizeConditions(rule: ProfileRule?): List<ConditionSummary> {
         if (rule == null) return emptyList()

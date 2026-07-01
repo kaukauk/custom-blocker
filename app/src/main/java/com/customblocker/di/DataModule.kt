@@ -127,11 +127,27 @@ object DataModule {
         }
     }
 
+    /** v12→v13: add the app_meta cache (label + icon snapshot) so uninstalled-but-targeted apps keep
+     *  their real name/icon. Additive, preserves user data. */
+    private val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS app_meta (
+                    packageName TEXT PRIMARY KEY NOT NULL,
+                    label TEXT NOT NULL,
+                    iconPng BLOB
+                )
+                """.trimIndent(),
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): BlockerDatabase =
         Room.databaseBuilder(context, BlockerDatabase::class.java, "blocker.db")
-            .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+            .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
             // Dev convenience backstop for older churn; real migrations are added per-version above.
             .fallbackToDestructiveMigration()
             .build()

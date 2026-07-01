@@ -137,6 +137,12 @@ class BlockerRepository @Inject constructor(
 
     suspend fun removeApp(profileId: Long, packageName: String) = dao.removeApp(profileId, packageName)
 
+    /** Snapshot a package's display label + icon (called while it's installed) for later offline use. */
+    suspend fun cacheAppMeta(packageName: String, label: String, iconPng: ByteArray?) =
+        dao.upsertAppMeta(com.customblocker.data.db.AppMetaEntity(packageName, label, iconPng))
+
+    suspend fun getAppMeta(packageName: String) = dao.getAppMeta(packageName)
+
     suspend fun setEnabled(profileId: Long, enabled: Boolean) = edit(profileId) { it.copy(enabled = enabled) }
 
     /** Pause a profile until [untilMillis] (0 resumes it immediately). */

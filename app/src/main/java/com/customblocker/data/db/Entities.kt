@@ -50,6 +50,19 @@ data class ProfileAppEntity(
     val enabled: Boolean = true,
 )
 
+/**
+ * Cached display metadata for a package (its real label + downscaled icon PNG), snapshotted while
+ * the app is installed. Lets the UI keep showing a targeted app's real name/icon after it's
+ * uninstalled, instead of falling back to the raw package name. Keyed by package, shared across
+ * profiles; a harmless cache (safe to lose/rebuild).
+ */
+@Entity(tableName = "app_meta")
+data class AppMetaEntity(
+    @PrimaryKey val packageName: String,
+    val label: String,
+    val iconPng: ByteArray? = null,
+)
+
 @Entity(
     tableName = "time_intervals",
     foreignKeys = [

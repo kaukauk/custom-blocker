@@ -3,11 +3,14 @@ package com.customblocker.ui
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import java.io.ByteArrayOutputStream
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,11 +40,25 @@ class AppLister @Inject constructor(
             .sortedBy { it.label.lowercase() }
     }
 
-    fun label(packageName: String): String = labelCache.getOrPut(packageName) {
+    /** Whether [packageName] is currently installed (so the UI can group uninstalled-but-targeted apps). */
+    fun isInstalled(packageName: String): Boolean =
         try {
-            val pm = context.packageManager
-            pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+            context.packageManager.getApplicationInfo(packageName, 0)
+            true
         } catch (e: Exception) {
+            false
+        }
+
+    fun label(packageName: String): String {
+        labelCache[packageName]?.let { return it }
+        return try {
+            val pm = context.packageManager
+            val resolved = pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+            labelCache[packageName] = resolved   // cache only real labels
+            resolved
+        } catch (e: Exception) {
+            // Don't cache the package-name fallback: if the app is later reinstalled, the next call
+            // should resolve its real label (so it moves out of the "uninstalled" section cleanly).
             packageName
         }
     }
@@ -51,14 +68,33 @@ class AppLister @Inject constructor(
      * calls are free. The first decode is heavy (adaptive-icon rasterisation) — call off the main
      * thread (callers resolve icons inside a background flow, never during scroll).
      */
-    fun iconBitmap(packageName: String): ImageBitmap? =
-        iconCache.getOrPut(packageName) {
-            Holder(
-                runCatching {
-                    context.packageManager.getApplicationIcon(packageName).toImageBitmap()
-                }.getOrNull(),
-            )
-        }.bitmap
+    fun iconBitmap(packageName: String): ImageBitmap? {
+        iconCache[packageName]?.let { return it.bitmap }
+        val bmp = runCatching {
+            context.packageManager.getApplicationIcon(packageName).toImageBitmap()
+        }.getOrNull()
+        // Cache only a real icon; a null almost always means the app isn't installed, so don't cache
+        // it — a later reinstall should resolve the icon instead of staying blank.
+        if (bmp != null) iconCache[packageName] = Holder(bmp)
+        return bmp
+    }
+
+    /** Encode [packageName]'s (downscaled) icon to PNG bytes for persisting, or null if it has none. */
+    fun iconPng(packageName: String): ByteArray? {
+        val bmp = iconBitmap(packageName) ?: return null
+        return runCatching {
+            ByteArrayOutputStream().use { out ->
+                bmp.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, out)
+                out.toByteArray()
+            }
+        }.getOrNull()
+    }
+
+    /** Decode previously-persisted PNG icon bytes back to an [ImageBitmap]. */
+    fun decodeIcon(bytes: ByteArray?): ImageBitmap? {
+        if (bytes == null || bytes.isEmpty()) return null
+        return runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull()
+    }
 }
 
 /** Rasterise a drawable to a bitmap capped at [maxPx] so large adaptive icons don't bloat memory. */
