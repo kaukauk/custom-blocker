@@ -9,3 +9,6 @@ captures/
 .cxx/
 *.apk
 *.aab
+
+# Local app-data snapshots from scripts/localbackup.sh (private user data)
+backups/

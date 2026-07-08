@@ -20,12 +20,28 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        // Pin the debug signing key IN the repo so every machine/CI produces the SAME
+        // signature. Android's default per-machine ~/.android/debug.keystore means a build
+        // from machine B can't update (or restore Auto Backup into) an app installed from
+        // machine A — the signatures differ. Committing this shared debug key removes that
+        // whole class of "signatures do not match" failures. (Debug key only; password is the
+        // well-known "android" — never use this for release.)
+        getByName("debug") {
+            storeFile = rootProject.file("keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         debug {
             // `-PidExtra=N` yields a second installable package (com.customblocker.debugN) — used to
             // verify the auto-block-new-apps receiver against a genuine package install.
             applicationIdSuffix = ".debug" + (project.findProperty("idExtra") ?: "")
             isDebuggable = true
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             isMinifyEnabled = false
