@@ -251,6 +251,24 @@ object SettingsGuard {
         return texts.any { t -> AUTH_CONFIRM_TEXT_MARKERS.any { t.contains(it) } }
     }
 
+    /**
+     * True if the current screen is specifically the NOTIFICATION-ACCESS grant surface (the listener
+     * list or its per-app confirm dialog) — and nothing else. Used to scope the Strict-Mode exemption
+     * that lets the user turn notification access ON from our popout prompt: it matches notification
+     * screens only, so the exemption never opens Accessibility / Device admin / app-info. [texts] must
+     * be lowercased node text/content-descriptions.
+     */
+    fun isNotificationAccessGrantSurface(className: String?, texts: List<String>): Boolean {
+        val cls = className?.lowercase().orEmpty()
+        if (cls.contains("notificationaccess") || cls.contains("notificationlistener")) return true
+        return texts.any { t ->
+            t.contains("notification access") ||
+                t.contains("access your notifications") ||
+                t.contains("access notifications") ||
+                t.contains("device & app notification")
+        }
+    }
+
     /** App-agnostic title backstop (see [DANGEROUS_SUBSTRINGS]). */
     fun isDangerous(titles: List<CharSequence>): Boolean {
         val norm = titles.map(::normalize).filter { it.isNotEmpty() }

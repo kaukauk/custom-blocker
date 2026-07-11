@@ -124,7 +124,7 @@ fun SettingsScreen(
                 val perms = listOf(
                     PermissionItem("Accessibility", "To detect which app is in the foreground and block it.", accessibilityOn) { Permissions.openAccessibilitySettings(context) },
                     PermissionItem("Display over other apps", "To show the block screen on top of a blocked app.", overlayOn) { Permissions.openOverlaySettings(context) },
-                    PermissionItem("Notification access", "Lets the app hide or batch notifications from blocked apps.", notificationOn) { Permissions.openNotificationAccessSettings(context) },
+                    PermissionItem("Notification access", "Important — stops a blocked app's popout (picture-in-picture) video, e.g. YouTube, when it hits its limit, and holds notifications from blocked apps.", notificationOn) { Permissions.openNotificationAccessSettings(context) },
                     PermissionItem("Run without battery limits", "Keeps blocking running in the background.", batteryExempt) {
                         // Off → the one-tap "Allow" system pop-up (no list to scroll). On → the list,
                         // the only place it can be revoked.

@@ -27,6 +27,7 @@ import com.customblocker.service.conditions.TimeBoundaryScheduler
 import com.customblocker.service.conditions.UsageTracker
 import com.customblocker.service.monitoring.StatusNotification
 import com.customblocker.service.overlay.OverlayController
+import com.customblocker.ui.onboarding.Permissions
 import com.customblocker.util.L
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -81,6 +82,19 @@ class BlockerAccessibilityService : AccessibilityService() {
                 // can't bank the sleep gap (it sees screenOn = false and skips).
                 Intent.ACTION_SCREEN_ON -> { sinceMs = SystemClock.elapsedRealtime(); screenOn = true }
             }
+        }
+    }
+
+    /**
+     * User tapped the "block the popout?" prompt. Arm the scoped Strict-Mode exemption, then open the
+     * notification-access grant screen — routing through here (not a direct Settings deep-link) is what
+     * lets the screen survive the L3 Settings guard.
+     */
+    private val enableNotifAccessReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: android.content.Intent?) {
+            notifGrantExemptUntilMs = SystemClock.elapsedRealtime() + NOTIF_GRANT_WINDOW_MS
+            L.d(L.ENGINE, "notification-access grant armed; opening grant screen")
+            Permissions.openNotificationAccessSettings(this@BlockerAccessibilityService)
         }
     }
 
@@ -141,6 +155,15 @@ class BlockerAccessibilityService : AccessibilityService() {
     private var authExemptUntilMs: Long = 0L
     /** Our own app label ("Custom Blocker"), used to spot screens that are about US in the node tree. */
     private var selfLabel: String = ""
+    /** Whether the "block the popout?" prompt is currently posted (avoid re-notifying each tick). */
+    private var popoutPromptShown: Boolean = false
+    /**
+     * Until this (elapsedRealtime) the Strict-Mode Settings guard lets the notification-access grant
+     * screen through — armed only when the user taps our popout prompt. Scoped to that one screen;
+     * every real tamper surface (accessibility, device admin, our app-info) is still ejected, so it
+     * can't be abused to disable blocking. See [SettingsGuard.isNotificationAccessGrantSurface].
+     */
+    private var notifGrantExemptUntilMs: Long = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -163,7 +186,13 @@ class BlockerAccessibilityService : AccessibilityService() {
             },
             Context.RECEIVER_NOT_EXPORTED,
         )
+        registerReceiver(
+            enableNotifAccessReceiver,
+            IntentFilter(StatusNotification.ACTION_ENABLE_NOTIF_ACCESS),
+            Context.RECEIVER_NOT_EXPORTED,
+        )
         L.d(L.FG, "accessibility service connected")
+        updatePopoutPrompt()   // reflect any popout already on screen the moment blocking starts
         // If the user just enabled us from the app, pop back to the app instead of stranding them in Settings.
         com.customblocker.service.PermissionReturn.returnToAppIfArmed(this)
         // Keep the latest Strict Mode config for the L3 settings guard.
@@ -177,6 +206,8 @@ class BlockerAccessibilityService : AccessibilityService() {
                 if (c.enabled && c.gate == UnlockGate.TIMER && c.lockedUntilMillis in 1..System.currentTimeMillis()) {
                     strictModeStore.setEnabled(false)   // also clears the deadline
                 }
+                updatePopoutPrompt()   // prompt only while a popout is on screen and access is off
+
                 if (powerManager.isInteractive) {
                     refreshAccruing()   // pick up a PiP tile / split pane that opened without an event we track
                     accrueUsage()
@@ -466,6 +497,16 @@ class BlockerAccessibilityService : AccessibilityService() {
     private fun guardSettings(pkg: String, titles: List<CharSequence>, className: String?): Boolean {
         val (texts, hasToggle) = scanActiveWindow()
 
+        // Scoped Strict-Mode exemption: the user tapped our popout prompt to turn ON notification
+        // access, so let ONLY the notification-access grant screen through while the short permit is
+        // live. Every other tamper surface still falls through to the eject logic below, so this can't
+        // be used to reach Accessibility / Device admin / our app-info and disable blocking.
+        if (SystemClock.elapsedRealtime() < notifGrantExemptUntilMs &&
+            SettingsGuard.isNotificationAccessGrantSurface(className, texts)
+        ) {
+            return false
+        }
+
         // Installer: a single-app surface (e.g. the uninstall dialog). Only act when it's about us;
         // uninstalling / managing other apps stays allowed.
         if (SettingsGuard.isSingleAppSurface(pkg)) {
@@ -678,6 +719,21 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Show the "block the popout?" prompt only in the moment it matters: a picture-in-picture window
+     * is on screen AND notification access is off (so we can't stop it via its media session). Blocking
+     * apps still works without the permission; this nudges the user exactly when a popout could slip
+     * past its limit. Only touches the notification on an actual state change.
+     */
+    private fun updatePopoutPrompt() {
+        val pipActive = runCatching { windows.any { it.isInPictureInPictureMode } }.getOrDefault(false)
+        val shouldPrompt = pipActive && !Permissions.isNotificationAccessGranted(this)
+        if (shouldPrompt == popoutPromptShown) return
+        popoutPromptShown = shouldPrompt
+        if (shouldPrompt) StatusNotification.showPopoutPrompt(this)
+        else StatusNotification.clearPopoutPrompt(this)
+    }
+
     override fun onInterrupt() {
         L.w(L.FG, "accessibility service interrupted")
     }
@@ -688,6 +744,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         overlay.hide()
         runCatching { unregisterReceiver(reevalReceiver) }
         runCatching { unregisterReceiver(screenReceiver) }
+        runCatching { unregisterReceiver(enableNotifAccessReceiver) }
         L.w(L.FG, "accessibility service destroyed")
     }
 
@@ -702,5 +759,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         const val AUTH_EXEMPT_MS = 8_000L
         /** Delay before resetting Settings after an eject, so it's backgrounded first (killable). */
         const val SETTINGS_RESET_DELAY_MS = 400L
+        /** How long the notification-access grant screen stays reachable under Strict Mode after a tap. */
+        const val NOTIF_GRANT_WINDOW_MS = 2 * 60_000L
     }
 }

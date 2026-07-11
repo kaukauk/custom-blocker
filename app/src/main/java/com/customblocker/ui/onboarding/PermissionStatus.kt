@@ -147,10 +147,11 @@ fun NotificationNudgeBanner(modifier: Modifier = Modifier) {
                 Text("Notifications are still getting through", style = MaterialTheme.typography.titleMedium)
             }
             Text(
-                "While a profile is actively blocking an app, its notifications can still buzz and pull " +
-                    "you back in. Turn on notification access and we'll hold those — only while it's being " +
-                    "blocked — then deliver them once the block lifts. Any other time, notifications come " +
-                    "through as normal. So you're not constantly pinged, but never miss a thing.",
+                "Two things need this. A video playing in a popout (picture-in-picture) window — e.g. " +
+                    "YouTube — can keep playing past its limit unless we can stop it here. And while a " +
+                    "profile is blocking an app, its notifications can still buzz and pull you back in; " +
+                    "with access we hold those only while it's blocked, then deliver them once the block " +
+                    "lifts. Any other time, notifications come through as normal.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Button(
