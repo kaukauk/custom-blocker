@@ -50,7 +50,7 @@ fun NotificationsScreen(
     onBack: () -> Unit,
     onAddFilter: () -> Unit,
     onEditFilter: (Long) -> Unit,
-    onCreateFromNotification: (pkg: String, seed: String) -> Unit,
+    onCreateFromNotification: (pkg: String, title: String, text: String) -> Unit,
     viewModel: NotificationsViewModel = hiltViewModel(),
 ) {
     var tab by remember { mutableIntStateOf(0) }
@@ -90,7 +90,7 @@ fun NotificationsScreen(
                 0 -> HistoryList(
                     history = history,
                     loadIcon = viewModel::iconBitmap,
-                    onTap = { onCreateFromNotification(it.packageName, it.text.ifBlank { it.title }) },
+                    onTap = { onCreateFromNotification(it.packageName, it.title, it.text) },
                     onDelete = { viewModel.deleteCaptured(it) },
                 )
                 else -> FilterList(

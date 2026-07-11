@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.customblocker.data.db.NotifFilterEntity
 import com.customblocker.data.repo.BlockerRepository
+import com.customblocker.domain.engine.NotifMatchTarget
 import com.customblocker.domain.engine.NotifSample
 import com.customblocker.ui.AppLister
 import com.customblocker.ui.InstalledApp
@@ -41,12 +42,14 @@ class FilterEditViewModel @Inject constructor(
 
     private val filterId: Long = savedStateHandle.get<Long>("filterId") ?: 0L
     private val prefillPkg: String? = savedStateHandle.get<String>("pkg")?.takeIf { it.isNotBlank() }
-    private val focusText: String? = savedStateHandle.get<String>("focus")?.takeIf { it.isNotBlank() }
+    private val prefillTitle: String? = savedStateHandle.get<String>("title")?.takeIf { it.isNotBlank() }
+    private val prefillText: String? = savedStateHandle.get<String>("text")?.takeIf { it.isNotBlank() }
 
     val isNew: Boolean get() = filterId == 0L
 
     /** The notification the user tapped to start this filter (if any), used to focus suggestions. */
-    val focus: NotifSample? = prefillPkg?.let { NotifSample(it, "", focusText.orEmpty()) }
+    val focus: NotifSample? =
+        prefillPkg?.let { NotifSample(it, prefillTitle.orEmpty(), prefillText.orEmpty()) }
 
     private val _form = MutableStateFlow<FilterForm?>(null)
     /** Null until loaded; the screen seeds its editable state from the first non-null value. */
@@ -66,10 +69,43 @@ class FilterEditViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _form.value = if (filterId == 0L) {
-                FilterForm(packages = prefillPkg?.let { setOf(it) } ?: emptySet())
+                newFormFromPrefill()
             } else {
                 repository.getNotifFilter(filterId)?.toForm() ?: FilterForm()
             }
+        }
+    }
+
+    /**
+     * Build the blank-filter form. When the user started this from a tapped notification, prefill the
+     * pattern fields with that notification's title/content and default "match by" to BOTH (title AND
+     * content). If only one of the two is present, fall back to matching on just that one. The fields
+     * are regex, so the tapped text is regex-escaped ([escapeRegex]) — a literal notification with
+     * characters like ()?.+ becomes a valid, literal-matching pattern instead of broken regex.
+     */
+    private fun newFormFromPrefill(): FilterForm {
+        val packages = prefillPkg?.let { setOf(it) } ?: emptySet()
+        val title = prefillTitle?.let(::escapeRegex).orEmpty()
+        val content = prefillText?.let(::escapeRegex).orEmpty()
+        val (pattern, secondary, target) = when {
+            title.isNotBlank() && content.isNotBlank() -> Triple(title, content, NotifMatchTarget.BOTH)
+            title.isNotBlank() -> Triple(title, "", NotifMatchTarget.TITLE)
+            content.isNotBlank() -> Triple(content, "", NotifMatchTarget.CONTENT)
+            else -> Triple("", "", NotifMatchTarget.EITHER)
+        }
+        return FilterForm(
+            packages = packages,
+            regexPattern = pattern,
+            secondaryPattern = secondary,
+            regexTarget = target.ordinal,
+        )
+    }
+
+    /** Escape regex metacharacters so a raw notification title/content matches literally. */
+    private fun escapeRegex(s: String): String = buildString {
+        for (c in s) {
+            if (c in "\\^$.|?*+()[]{}") append('\\')
+            append(c)
         }
     }
 
