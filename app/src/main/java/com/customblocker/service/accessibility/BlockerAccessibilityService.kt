@@ -1,8 +1,10 @@
 package com.customblocker.service.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.session.MediaSessionManager
 import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
@@ -408,20 +410,47 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * If [pkg] currently has a picture-in-picture window, tear its process down so the popout closes
-     * on a block. Best-effort: [killBackgroundProcesses] only reaps a process the platform deems
-     * safe to kill, so a PiP the system still treats as perceptible may need the next ticker pass
-     * (which re-blocks and retries) to actually clear it.
+     * If [pkg] currently has a picture-in-picture window (e.g. a YouTube popout), close it on a
+     * block. Sending the app HOME does NOT dismiss a PiP tile, and [killBackgroundProcesses] can't
+     * reap it either: an actively-playing PiP keeps its process 'perceptible', which the platform
+     * treats as unsafe to kill. So we first STOP the playback through the app's media session — that
+     * ends the PiP session and lets the video/audio actually stop — then reap the now-idle process.
      */
     private fun dismissPipIfPresent(pkg: String) {
         val hasPip = runCatching {
             windows.any { it.isInPictureInPictureMode && it.root?.packageName?.toString() == pkg }
         }.getOrDefault(false)
         if (!hasPip) return
-        L.d(L.ENGINE, "killing PiP for blocked $pkg")
-        runCatching {
-            getSystemService(android.app.ActivityManager::class.java)?.killBackgroundProcesses(pkg)
+        L.d(L.ENGINE, "closing PiP for blocked $pkg")
+        val stopped = stopMediaPlayback(pkg)
+        if (!stopped) L.w(L.ENGINE, "no media session found for $pkg — PiP may persist")
+        // Playback stopped → the tile releases and the process drops to a killable state; reap it so
+        // nothing lingers. Harmless if the media stop already closed everything.
+        runCatching { getSystemService(android.app.ActivityManager::class.java)?.killBackgroundProcesses(pkg) }
+    }
+
+    /**
+     * Stop every active media session owned by [pkg] via [MediaSessionManager]. Authorised by our
+     * enabled notification listener ([BlockerNotificationListener]); the accessibility service shares
+     * the app's identity, so it may pass that listener component. Returns true if a session was hit.
+     */
+    private fun stopMediaPlayback(pkg: String): Boolean = runCatching {
+        val msm = getSystemService(MediaSessionManager::class.java) ?: return false
+        val listener = ComponentName(
+            this,
+            com.customblocker.service.notifications.BlockerNotificationListener::class.java,
+        )
+        var acted = false
+        for (controller in msm.getActiveSessions(listener)) {
+            if (controller.packageName == pkg) {
+                controller.transportControls.stop()
+                acted = true
+            }
         }
+        acted
+    }.getOrElse {
+        L.e(L.ENGINE, "stopMediaPlayback failed for $pkg", it)
+        false
     }
 
     /**
