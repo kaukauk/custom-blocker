@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityWindowInfo
 import android.view.inputmethod.InputMethodManager
 import com.customblocker.data.prefs.SettingsGuardMode
 import com.customblocker.data.prefs.StrictModeConfig
@@ -59,7 +60,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         override fun onReceive(c: Context?, i: android.content.Intent?) {
             L.d(L.COND, "time boundary reached — re-evaluating")
             accrueUsage()
-            trackedPkg?.let { evaluate(it) }
+            for (p in accruing) if (evaluate(p)) break
             timeBoundaryScheduler.reschedule()
         }
     }
@@ -87,8 +88,17 @@ class BlockerAccessibilityService : AccessibilityService() {
     private lateinit var powerManager: PowerManager
 
     private var lastForeground: String? = null
-    /** The package whose foreground time we are currently accruing. */
+    /** The focused/active package — drives URL reading, launch counts and the Settings guard. */
     private var trackedPkg: String? = null
+    /**
+     * Every application currently on screen, whose foreground time we accrue this instant — the
+     * focused app PLUS a split-screen partner pane PLUS a picture-in-picture tile (e.g. YouTube
+     * popout). Derived from [windows] (we request `flagRetrieveInteractiveWindows`), not from the
+     * single event package, so two side-by-side apps both burn their limits at the normal rate and
+     * a PiP video keeps burning YouTube's limit while you're in another app. All members share the
+     * one [sinceMs] clock (they are all visible for the same wall-clock interval).
+     */
+    private var accruing: Set<String> = emptySet()
     /**
      * Packages that draw transient windows OVER the current app — the status bar / shade / heads-up
      * notifications / immersive-mode chrome (SystemUI) and the on-screen keyboard (IMEs). They fire
@@ -166,11 +176,15 @@ class BlockerAccessibilityService : AccessibilityService() {
                     strictModeStore.setEnabled(false)   // also clears the deadline
                 }
                 if (powerManager.isInteractive) {
+                    refreshAccruing()   // pick up a PiP tile / split pane that opened without an event we track
                     accrueUsage()
-                    trackedPkg?.let { p ->
+                    // Re-evaluate EVERY visible app (focused, split partner, PiP tile) so a background
+                    // pane or a popout that crosses its usage limit is blocked, not just the focused app.
+                    for (p in accruing) {
+                        if (evaluate(p)) break
                         // Re-check the current browser page too, so a website usage limit blocks
                         // promptly once exhausted even if the page didn't change.
-                        if (!evaluate(p) && BrowserUrlReader.isKnownBrowser(p)) recheckBrowserUrl(p)
+                        if (p == trackedPkg && BrowserUrlReader.isKnownBrowser(p)) recheckBrowserUrl(p)
                     }
                 }
             }
@@ -190,7 +204,7 @@ class BlockerAccessibilityService : AccessibilityService() {
             if (isOurActivity) {
                 if (pkg != lastForeground) {
                     lastForeground = pkg
-                    accrueUsage()
+                    refreshAccruing()   // credit prior apps; our own UI isn't an accruing target → set empties
                     trackedPkg = null
                     lastUrl = null
                     trackedUrl = null
@@ -221,13 +235,17 @@ class BlockerAccessibilityService : AccessibilityService() {
                         authExemptUntilMs = 0L   // left the guarded surfaces → end any auth exemption
                     }
 
-                    accrueUsage()                 // finalize the previous app's foreground time
+                    // Credit the previously-visible set up to now (trackedPkg is still the OLD focused
+                    // app, so a browser's final website time lands on the right profile), then swap the
+                    // accruing set to what's on screen now and restart the shared clock. If the new
+                    // focus was already accruing (a split partner gaining focus), the set is unchanged
+                    // and the clock keeps running — both panes accrue continuously.
+                    refreshAccruing()
                     // Reset the tracked URLs only AFTER crediting the previous app's final segment, so
                     // a browser's last bit of website time isn't lost on the switch away.
                     lastUrl = null
                     trackedUrl = null
                     trackedPkg = pkg
-                    sinceMs = SystemClock.elapsedRealtime()
                     usageTracker.onLaunch(pkg, contextProvider.current())  // count a launch for launch-limited profiles
 
                     L.d(L.FG, "foreground=$pkg cls=${event.className}")
@@ -302,19 +320,61 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Credit the elapsed segment to EVERY app in [accruing] — the focused app, a split-screen
+     * partner and a PiP tile all burn their own profile's limit simultaneously. They share the one
+     * [sinceMs] clock because they were all on screen for the same interval.
+     */
     private fun accrueUsage() {
-        val pkg = trackedPkg ?: return
         if (!screenOn) return   // don't bank time while the screen is off — elapsedRealtime spans sleep
+        if (accruing.isEmpty()) return
         val now = SystemClock.elapsedRealtime()
         val seconds = ((now - sinceMs) / 1000L).toInt()
-        if (seconds > 0) {
-            // trackedUrl is the sticky current page for trackedPkg (survives a hidden toolbar), so a
-            // browser's website-matched time is credited to the right profile's usage limit.
-            usageTracker.addUsage(pkg, trackedUrl, seconds, contextProvider.current())
+        if (seconds <= 0) return
+        val ctx = contextProvider.current()
+        for (pkg in accruing) {
+            // trackedUrl is the sticky current page for the FOCUSED browser (survives a hidden
+            // toolbar), so a browser's website-matched time is credited to the right profile; a
+            // non-focused pane has no URL context.
+            val url = if (pkg == trackedPkg) trackedUrl else null
+            usageTracker.addUsage(pkg, url, seconds, ctx)
             statsRecorder.recordUsage(pkg, seconds)
-            sinceMs = now
         }
+        sinceMs = now
     }
+
+    /**
+     * Recompute the on-screen app set from [windows]. If it changed, finalize the OLD set's elapsed
+     * time first (still using the current [trackedPkg]/[trackedUrl] for browser credit) and restart
+     * the shared clock, so no interval is double-counted or lost across the swap.
+     */
+    private fun refreshAccruing() {
+        val visible = visibleAppPackages()
+        if (visible == accruing) return
+        accrueUsage()                               // credit the old set up to now
+        accruing = visible
+        sinceMs = SystemClock.elapsedRealtime()     // restart the clock for the new set
+    }
+
+    /**
+     * The packages of every application window currently on screen: the focused app, a split-screen
+     * partner pane, and a picture-in-picture tile (still a [AccessibilityWindowInfo.TYPE_APPLICATION]
+     * window, flagged [AccessibilityWindowInfo.isInPictureInPictureMode]). Excludes ourselves, the
+     * SystemUI/IME transient overlays and the launcher — none of those should burn a usage limit.
+     * Falls back to the current set if [windows] is momentarily unavailable.
+     */
+    private fun visibleAppPackages(): Set<String> = runCatching {
+        val out = LinkedHashSet<String>()
+        for (w in windows) {
+            if (w.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
+            val pkg = w.root?.packageName?.toString() ?: continue
+            if (pkg == packageName) continue
+            if (pkg in transientOverlays) continue
+            if (pkg in engine.systemPackages) continue   // launcher / recents
+            out.add(pkg)
+        }
+        out as Set<String>
+    }.getOrDefault(accruing)
 
     /** Returns true if the app was blocked. */
     private fun evaluate(pkg: String): Boolean {
@@ -342,6 +402,26 @@ class BlockerAccessibilityService : AccessibilityService() {
                 .addCategory(Intent.CATEGORY_HOME)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
+        // A picture-in-picture tile (e.g. YouTube popout) floats ABOVE our overlay and survives HOME,
+        // so covering the screen isn't enough — the video keeps playing. Kill the process to close it.
+        dismissPipIfPresent(decision.packageName)
+    }
+
+    /**
+     * If [pkg] currently has a picture-in-picture window, tear its process down so the popout closes
+     * on a block. Best-effort: [killBackgroundProcesses] only reaps a process the platform deems
+     * safe to kill, so a PiP the system still treats as perceptible may need the next ticker pass
+     * (which re-blocks and retries) to actually clear it.
+     */
+    private fun dismissPipIfPresent(pkg: String) {
+        val hasPip = runCatching {
+            windows.any { it.isInPictureInPictureMode && it.root?.packageName?.toString() == pkg }
+        }.getOrDefault(false)
+        if (!hasPip) return
+        L.d(L.ENGINE, "killing PiP for blocked $pkg")
+        runCatching {
+            getSystemService(android.app.ActivityManager::class.java)?.killBackgroundProcesses(pkg)
+        }
     }
 
     /**
