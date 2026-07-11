@@ -392,9 +392,22 @@ private fun OptionRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             RadioButton(selected = selected, onClick = onClick, enabled = enabled)
+            // Grey the whole row (not just the radio) when it can't be picked — e.g. a Strict Mode
+            // level below the current one, which can't be selected while active.
+            val disabledAlpha = 0.38f
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                Text(description, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (enabled) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha),
+                )
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha),
+                )
             }
         }
     }
