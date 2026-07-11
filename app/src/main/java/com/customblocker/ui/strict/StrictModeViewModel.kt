@@ -38,11 +38,15 @@ class StrictModeViewModel @Inject constructor(
     }
     /**
      * Change the Strict Mode level. While Strict Mode is active the level can only be RAISED, never
-     * lowered (lowering would weaken protection); the UI confirms a raise first. When inactive, any
-     * level may be chosen freely.
+     * lowered (lowering would weaken protection); the UI confirms a raise first. L2/L3 rely on Device
+     * admin (uninstall protection) and can't function without it, so raising into them while active
+     * requires it to be granted — mirroring the enable guard. When inactive, any level may be chosen
+     * freely (the master toggle still blocks turning on at L2/L3 until Device admin is granted).
      */
     fun setLevel(level: Int) = viewModelScope.launch {
-        if (config.value.enabled && level < config.value.level) return@launch
+        val cfg = config.value
+        if (cfg.enabled && level < cfg.level) return@launch
+        if (cfg.enabled && level >= 2 && !BlockerDeviceAdminReceiver.isActive(context)) return@launch
         store.setLevel(level)
     }
     fun setGate(gate: UnlockGate) = viewModelScope.launch { store.setGate(gate) }

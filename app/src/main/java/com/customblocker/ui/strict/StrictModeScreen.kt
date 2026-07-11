@@ -191,8 +191,15 @@ fun StrictModeScreen(
                     selected = config.level == lvl,
                     title = "L$lvl — $title",
                     description = desc,
-                    // While Strict Mode is active the level can only be RAISED, never lowered.
-                    enabled = !config.enabled || lvl >= config.level,
+                    // While active: only a RAISE is selectable, and raising into L2/L3 needs Device
+                    // admin (they can't function without it — see the card below).
+                    enabled = when {
+                        !config.enabled -> true
+                        lvl < config.level -> false
+                        lvl == config.level -> true
+                        lvl >= 2 && !deviceAdminActive -> false
+                        else -> true
+                    },
                     onClick = {
                         // Raising while active is a one-way step — confirm it first.
                         if (config.enabled && lvl > config.level) pendingLevel = lvl
@@ -231,9 +238,11 @@ fun StrictModeScreen(
             }
 
             // L2/L3 block uninstalling, which needs the Device admin permission. Explain + offer to
-            // grant it; Strict Mode can't be turned on at these levels until it's active.
-            if (config.level >= 2 && !deviceAdminActive) {
+            // grant it. Shown when L2/L3 is selected without admin, OR while Strict Mode is active at
+            // L1 without admin (so the user knows why the L2/L3 rows above are disabled).
+            if (!deviceAdminActive && (config.level >= 2 || config.enabled)) {
                 item {
+                    val forCurrentLevel = config.level >= 2
                     Card(
                         Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -242,11 +251,20 @@ fun StrictModeScreen(
                         ),
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Device admin needed for level ${config.level}", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                "This level stops the app being uninstalled, which needs the Device admin " +
-                                    "permission. Strict Mode won't work right and can't be turned on at this " +
-                                    "level until it's granted.",
+                                if (forCurrentLevel) "Device admin needed for level ${config.level}"
+                                else "Device admin needed to raise the level",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(
+                                if (forCurrentLevel) {
+                                    "This level stops the app being uninstalled, which needs the Device admin " +
+                                        "permission. Strict Mode won't work right and can't be turned on at this " +
+                                        "level until it's granted."
+                                } else {
+                                    "Levels 2 and 3 stop the app being uninstalled, which needs the Device admin " +
+                                        "permission. Turn it on to raise Strict Mode to level 2 or 3."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                             )
                             FilledTonalButton(onClick = {
