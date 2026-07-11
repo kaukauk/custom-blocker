@@ -140,6 +140,10 @@ object SettingsGuard {
         "display over other apps",
         "modify system settings",
         "install unknown apps",
+        // Developer options is a tamper surface: USB debugging there lets adb disable the blocker,
+        // and it hosts "stay awake", mock locations, etc. Gated by hasToggle like the others, so the
+        // System page that merely *lists* "Developer options" (no toggles) isn't falsely caught.
+        "developer options",
         // The Privacy page (Settings > Security and privacy > Privacy) links straight to the
         // permission manager and an "Accessibility special access" list — a back-door to the
         // accessibility grant. These phrases are unique to that leaf, not the Security & privacy

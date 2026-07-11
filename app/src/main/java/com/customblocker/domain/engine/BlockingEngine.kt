@@ -83,6 +83,13 @@ class BlockingEngine @Inject constructor() {
         "com.samsung.android.emergency",
         "com.sec.android.emergencylauncher",
         "com.sec.android.provider.emergencymode",
+        // Core system + common surfaces that pop up during normal use; an allow-list that omits
+        // them would break USB file transfer, screenshots, share/verification dialogs, etc.
+        "android",                                  // the Android system package (system dialogs/choosers)
+        "com.samsung.android.mtp",                  // USB file transfer (MTP)
+        "com.samsung.android.app.smartcapture",     // screenshot / screen-write toolbar
+        "com.sec.android.gallery3d",                // Samsung Gallery
+        "com.google.android.gms",                   // Google Play services (sign-in / verification dialogs)
     )
 
     /**
