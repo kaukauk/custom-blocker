@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pin
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -89,6 +90,8 @@ fun StrictModeScreen(
     val lock by lockViewModel.state.collectAsStateWithLifecycle()
     val locked = lock.locked
     var showUnlock by remember { mutableStateOf(false) }
+    // A level the user is about to raise to while Strict Mode is active (needs confirmation); null = none.
+    var pendingLevel by remember { mutableStateOf<Int?>(null) }
     val earnUnlock = rememberEarnUnlockLauncher(lock.config)
     // Accordion: at most one unlock-method card expanded at a time. Start with none expanded.
     var expandedGate by remember { mutableStateOf<UnlockGate?>(null) }
@@ -101,6 +104,23 @@ fun StrictModeScreen(
             lockViewModel = lockViewModel,
             onUnlocked = { showUnlock = false },
             onDismiss = { showUnlock = false },
+        )
+    }
+
+    pendingLevel?.let { lvl ->
+        AlertDialog(
+            onDismissRequest = { pendingLevel = null },
+            title = { Text("Raise to Level $lvl?") },
+            text = {
+                Text(
+                    "Strict Mode is active. You can raise the level now, but you won't be able to lower " +
+                        "it again until Strict Mode is unlocked.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.setLevel(lvl); pendingLevel = null }) { Text("Raise to L$lvl") }
+            },
+            dismissButton = { TextButton(onClick = { pendingLevel = null }) { Text("Cancel") } },
         )
     }
 
@@ -171,8 +191,13 @@ fun StrictModeScreen(
                     selected = config.level == lvl,
                     title = "L$lvl — $title",
                     description = desc,
-                    enabled = !locked,
-                    onClick = { viewModel.setLevel(lvl) },
+                    // While Strict Mode is active the level can only be RAISED, never lowered.
+                    enabled = !config.enabled || lvl >= config.level,
+                    onClick = {
+                        // Raising while active is a one-way step — confirm it first.
+                        if (config.enabled && lvl > config.level) pendingLevel = lvl
+                        else viewModel.setLevel(lvl)
+                    },
                 )
             }
 

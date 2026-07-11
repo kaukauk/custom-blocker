@@ -76,6 +76,13 @@ fun ConditionsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val locked by viewModel.editLocked.collectAsStateWithLifecycle()
     val mask = state.conditionsMask
+    // Which conditions are currently on — used to allow only restrictiveness-increasing edits while
+    // locked: a condition's enable Switch may only turn it OFF (removing an AND-gate is more
+    // restrictive), never back ON.
+    val timeOn = mask and ConditionTypes.TIME != 0
+    val locationOn = mask and ConditionTypes.LOCATION != 0
+    val usageOn = mask and ConditionTypes.USAGE_LIMIT != 0
+    val launchOn = mask and ConditionTypes.LAUNCH_COUNT != 0
 
     // Accordion: at most one condition expanded at a time (its bit, or null). Pre-expands the
     // condition the user tapped on the profile screen.
@@ -115,8 +122,10 @@ fun ConditionsScreen(
             if (locked) {
                 item {
                     Text(
-                        "Locked: this profile is active or Strict Mode is on, so conditions are frozen. " +
-                            "You can only lower a usage/launch limit (to block sooner).",
+                        "Strict Mode is on, so you can only make this profile stricter: add days, widen or " +
+                            "add time windows, add places/Wi-Fi, and lower a usage/launch limit. You can't " +
+                            "loosen it — no removing a condition, deleting a window/place, or raising a limit. " +
+                            "Charging is fixed.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -130,17 +139,20 @@ fun ConditionsScreen(
                     description = "This profile is active only on the chosen days and time windows.",
                     enabled = mask and ConditionTypes.TIME != 0,
                     onToggle = { on -> viewModel.setConditionEnabled(ConditionTypes.TIME, on); if (on) expanded = ConditionTypes.TIME },
-                    toggleEnabled = !locked,
+                    // Locked: may turn the schedule OFF (more restrictive), not back on.
+                    toggleEnabled = !locked || timeOn,
                     expanded = expanded == ConditionTypes.TIME,
                     onExpand = { toggleExpand(ConditionTypes.TIME) },
                 ) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         DAYS.forEach { (label, bit) ->
+                            val dayOn = state.dayFlags and bit != 0
                             FilterChip(
-                                selected = state.dayFlags and bit != 0,
+                                selected = dayOn,
                                 onClick = { viewModel.toggleDay(bit) },
                                 label = { Text(label) },
-                                enabled = !locked,
+                                // Locked: may switch a day ON (widen), not off.
+                                enabled = !locked || !dayOn,
                             )
                         }
                     }
@@ -151,25 +163,28 @@ fun ConditionsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // Tap the time to edit this window; pre-fills the picker with its values.
+                            // Editing stays available while locked — the ViewModel permits only edits
+                            // that extend the window.
                             Text(
                                 "${hhmm(interval.fromMinuteOfDay)} – ${hhmm(interval.toMinuteOfDay)}",
                                 Modifier
                                     .weight(1f)
-                                    .clickable(enabled = !locked) {
+                                    .clickable {
                                         editingIntervalId = interval.id
                                         pendingStart = interval.fromMinuteOfDay
                                         pickerStage = 1
                                     }
                                     .padding(vertical = 8.dp),
                             )
+                            // Removing a window frees blocked time → disabled while locked.
                             IconButton(onClick = { viewModel.removeInterval(interval.id) }, enabled = !locked) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove window")
                             }
                         }
                     }
+                    // Adding a window only adds blocked time → always allowed.
                     OutlinedButton(
                         onClick = { editingIntervalId = null; pickerStage = 1 },
-                        enabled = !locked,
                     ) { Text("Add time window") }
                 }
             }
@@ -181,7 +196,8 @@ fun ConditionsScreen(
                     description = "This profile is active only at (or away from) chosen places.",
                     enabled = mask and ConditionTypes.LOCATION != 0,
                     onToggle = { on -> viewModel.setConditionEnabled(ConditionTypes.LOCATION, on); if (on) expanded = ConditionTypes.LOCATION },
-                    toggleEnabled = !locked,
+                    // Locked: may turn Location OFF (more restrictive), not back on.
+                    toggleEnabled = !locked || locationOn,
                     expanded = expanded == ConditionTypes.LOCATION,
                     onExpand = { toggleExpand(ConditionTypes.LOCATION) },
                 ) {
@@ -193,7 +209,9 @@ fun ConditionsScreen(
                             onRemove = { viewModel.removeGeo(geo.id) },
                         )
                     }
-                    OutlinedButton(onClick = { onOpenMap(null) }, enabled = !locked) { Text("Add location") }
+                    // Adding a place widens where the profile applies → allowed. (This editor only
+                    // shows once Location is on, so adding here never turns the condition on itself.)
+                    OutlinedButton(onClick = { onOpenMap(null) }) { Text("Add location") }
                 }
             }
 
@@ -204,7 +222,8 @@ fun ConditionsScreen(
                     description = "Allow a set amount of use per hour or day — once it's used up this profile blocks until it resets.",
                     enabled = mask and ConditionTypes.USAGE_LIMIT != 0,
                     onToggle = { on -> viewModel.toggleUsage(on); if (on) expanded = ConditionTypes.USAGE_LIMIT },
-                    toggleEnabled = !locked,
+                    // Locked: may turn the limit OFF (blocks unconditionally = stricter), not back on.
+                    toggleEnabled = !locked || usageOn,
                     expanded = expanded == ConditionTypes.USAGE_LIMIT,
                     onExpand = { toggleExpand(ConditionTypes.USAGE_LIMIT) },
                 ) {
@@ -227,7 +246,8 @@ fun ConditionsScreen(
                     description = "Allow a set number of opens per hour or day — after that this profile blocks until it resets.",
                     enabled = mask and ConditionTypes.LAUNCH_COUNT != 0,
                     onToggle = { on -> viewModel.toggleLaunch(on); if (on) expanded = ConditionTypes.LAUNCH_COUNT },
-                    toggleEnabled = !locked,
+                    // Locked: may turn the limit OFF (blocks unconditionally = stricter), not back on.
+                    toggleEnabled = !locked || launchOn,
                     expanded = expanded == ConditionTypes.LAUNCH_COUNT,
                     onExpand = { toggleExpand(ConditionTypes.LAUNCH_COUNT) },
                 ) {
@@ -379,7 +399,8 @@ private fun LimitEditor(
     locked: Boolean = false,
     isTime: Boolean = false,
 ) {
-    // Locked: only accept a decrease (block sooner), never an increase.
+    // Locked: only accept a decrease (block sooner), never an increase. The wheels stay interactive
+    // so the decrease is reachable; commit() drops any increase.
     fun commit(n: Int) { if (n > 0 && (!locked || n < value)) onValue(n) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -387,12 +408,12 @@ private fun LimitEditor(
             horizontalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             if (isTime && daily) {
-                WheelColumn("hours", value / 60, 0..23, locked) { h -> commit(h * 60 + value % 60) }
-                WheelColumn("minutes", value % 60, 0..59, locked) { m -> commit((value / 60) * 60 + m) }
+                WheelColumn("hours", value / 60, 0..23) { h -> commit(h * 60 + value % 60) }
+                WheelColumn("minutes", value % 60, 0..59) { m -> commit((value / 60) * 60 + m) }
             } else if (isTime) {
-                WheelColumn("minutes", value, 1..60, locked) { commit(it) }
+                WheelColumn("minutes", value, 1..60) { commit(it) }
             } else {
-                WheelColumn(unitLabel, value, 1..100, locked) { commit(it) }
+                WheelColumn(unitLabel, value, 1..100) { commit(it) }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -403,9 +424,9 @@ private fun LimitEditor(
 }
 
 @Composable
-private fun WheelColumn(label: String, value: Int, range: IntRange, locked: Boolean, onValue: (Int) -> Unit) {
+private fun WheelColumn(label: String, value: Int, range: IntRange, onValue: (Int) -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        com.customblocker.ui.components.NumberWheel(value = value, range = range, onValue = onValue, enabled = !locked)
+        com.customblocker.ui.components.NumberWheel(value = value, range = range, onValue = onValue, enabled = true)
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

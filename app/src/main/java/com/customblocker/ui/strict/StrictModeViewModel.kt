@@ -36,7 +36,15 @@ class StrictModeViewModel @Inject constructor(
             store.setEnabled(enabled)
         }
     }
-    fun setLevel(level: Int) = viewModelScope.launch { store.setLevel(level) }
+    /**
+     * Change the Strict Mode level. While Strict Mode is active the level can only be RAISED, never
+     * lowered (lowering would weaken protection); the UI confirms a raise first. When inactive, any
+     * level may be chosen freely.
+     */
+    fun setLevel(level: Int) = viewModelScope.launch {
+        if (config.value.enabled && level < config.value.level) return@launch
+        store.setLevel(level)
+    }
     fun setGate(gate: UnlockGate) = viewModelScope.launch { store.setGate(gate) }
     fun setSettingsGuardMode(mode: com.customblocker.data.prefs.SettingsGuardMode) =
         viewModelScope.launch { store.setSettingsGuardMode(mode) }
