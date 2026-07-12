@@ -22,4 +22,6 @@ class SettingsViewModel @Inject constructor(
 
     fun setDayStartHour(hour: Int) = viewModelScope.launch { store.setDayStartHour(hour) }
     fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { store.setThemeMode(mode) }
+    fun setNothingNewEnabled(enabled: Boolean) = viewModelScope.launch { store.setNothingNewEnabled(enabled) }
+    fun setNothingNewSeconds(seconds: Int) = viewModelScope.launch { store.setNothingNewSeconds(seconds) }
 }

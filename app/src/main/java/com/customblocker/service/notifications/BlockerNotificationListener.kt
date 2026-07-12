@@ -14,6 +14,7 @@ import com.customblocker.domain.engine.NotifFilterOutcome
 import com.customblocker.domain.engine.NotificationAction
 import com.customblocker.domain.engine.NotificationFilterEngine
 import com.customblocker.service.conditions.ContextProvider
+import com.customblocker.service.monitoring.NothingNewGuard
 import com.customblocker.util.L
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +47,7 @@ class BlockerNotificationListener : NotificationListenerService() {
     @Inject lateinit var contextProvider: ContextProvider
     @Inject lateinit var statsRecorder: StatsRecorder
     @Inject lateinit var appSettings: AppSettingsStore
+    @Inject lateinit var nothingNewGuard: NothingNewGuard
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -119,7 +121,12 @@ class BlockerNotificationListener : NotificationListenerService() {
         // 2) Profile notification suppression (existing behaviour) + observe in history.
         logCaptured(pkg, title, text, filterId = null, action = null)
         when (val action = engine.notificationAction(pkg, contextProvider.current(), appSettings.dayStartHour)) {
-            is NotificationAction.Allow -> {}
+            is NotificationAction.Allow -> {
+                // It actually reaches the user, so it's a real reason to pick the phone up — this is
+                // what stops the next unlock being paused by the nothing-new guard. Notifications we
+                // hide/batch/filter never get here: the user can't see them, so they don't count.
+                nothingNewGuard.onDelivered(System.currentTimeMillis())
+            }
             is NotificationAction.Hide -> {
                 L.d(L.ENGINE, "hide notification from $pkg")
                 runCatching { cancelNotification(sbn.key) }

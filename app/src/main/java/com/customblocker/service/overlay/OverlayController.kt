@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -31,7 +33,15 @@ class OverlayController @Inject constructor(
 
     private var overlayView: View? = null
 
+    /** The nothing-new pause window; kept separate so it can't clash with the block overlay. */
+    private var countdownView: View? = null
+    private var countdownLabel: TextView? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var countdownTick: Runnable? = null
+
     val isShowing: Boolean get() = overlayView != null
+
+    val isCountingDown: Boolean get() = countdownView != null
 
     fun canDrawOverlays(): Boolean = Settings.canDrawOverlays(context)
 
@@ -68,6 +78,108 @@ class OverlayController @Inject constructor(
             overlayView = null
             L.d(L.OVERLAY, "hidden")
         }
+    }
+
+    /**
+     * Hold the whole screen for [seconds] with a live countdown — the "nothing-new pause" shown when
+     * the user unlocks and nothing arrived while they were away. Deliberately has no dismiss button:
+     * it clears itself when the countdown reaches zero (or on [hideCountdown], e.g. the screen going
+     * off). Re-showing while one is already up is a no-op, so a burst of unlock events can't stack it.
+     */
+    fun showCountdown(seconds: Int, onFinished: (() -> Unit)? = null) {
+        if (!canDrawOverlays()) {
+            L.w(L.OVERLAY, "countdown: cannot show, SYSTEM_ALERT_WINDOW not granted")
+            return
+        }
+        if (countdownView != null) return
+        val total = seconds.coerceAtLeast(1)
+        val view = buildCountdownView(total)
+        try {
+            windowManager.addView(view, layoutParams())
+            countdownView = view
+            L.d(L.OVERLAY, "nothing-new pause: holding screen ${total}s")
+        } catch (t: Throwable) {
+            L.e(L.OVERLAY, "countdown addView failed", t)
+            return
+        }
+        var remaining = total
+        val tick = object : Runnable {
+            override fun run() {
+                remaining--
+                if (remaining <= 0) {
+                    hideCountdown()
+                    onFinished?.invoke()
+                    return
+                }
+                countdownLabel?.text = formatRemaining(remaining)
+                mainHandler.postDelayed(this, 1_000L)
+            }
+        }
+        countdownTick = tick
+        mainHandler.postDelayed(tick, 1_000L)
+    }
+
+    fun hideCountdown() {
+        countdownTick?.let { mainHandler.removeCallbacks(it) }
+        countdownTick = null
+        countdownLabel = null
+        val view = countdownView ?: return
+        try {
+            windowManager.removeView(view)
+        } catch (t: Throwable) {
+            L.e(L.OVERLAY, "countdown removeView failed", t)
+        } finally {
+            countdownView = null
+            L.d(L.OVERLAY, "nothing-new pause: released")
+        }
+    }
+
+    private fun formatRemaining(seconds: Int): String =
+        if (seconds >= 60) "%d:%02d".format(seconds / 60, seconds % 60) else seconds.toString()
+
+    private fun buildCountdownView(totalSeconds: Int): View {
+        val density = context.resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+
+        val root = FrameLayout(context).apply {
+            setBackgroundColor(Color.parseColor("#F20E1726")) // ~95% opaque dark, same as the block screen
+            // Swallow every touch so the screen really is held, not just covered.
+            isClickable = true
+            isFocusable = false
+        }
+        val column = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(32), dp(32), dp(32), dp(32))
+        }
+        column.addView(TextView(context).apply {
+            text = "Nothing new"
+            setTextColor(Color.WHITE)
+            textSize = 30f
+            gravity = Gravity.CENTER
+        })
+        column.addView(TextView(context).apply {
+            text = "Nothing arrived while you were away — so this pickup wasn't prompted by anything."
+            setTextColor(Color.parseColor("#B0FFFFFF"))
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(24))
+        })
+        countdownLabel = TextView(context).apply {
+            text = formatRemaining(totalSeconds)
+            setTextColor(Color.parseColor("#CFE5FF"))
+            textSize = 56f
+            gravity = Gravity.CENTER
+        }
+        column.addView(countdownLabel)
+        root.addView(
+            column,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ).apply { gravity = Gravity.CENTER },
+        )
+        return root
     }
 
     private fun layoutParams(): WindowManager.LayoutParams {

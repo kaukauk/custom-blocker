@@ -27,6 +27,13 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Whether newly-created profiles default to allow-list (vs block-list). */
     val defaultAllowlist: Boolean = false,
+    /**
+     * "Nothing-new pause": when you unlock and NO new notification arrived while the screen was off,
+     * hold the screen for [nothingNewSeconds] with a countdown — so a reflex check costs something.
+     */
+    val nothingNewEnabled: Boolean = false,
+    /** How long the pause lasts, in seconds. */
+    val nothingNewSeconds: Int = 30,
 )
 
 private val Context.appDataStore by preferencesDataStore(name = "app_settings")
@@ -39,6 +46,8 @@ class AppSettingsStore @Inject constructor(
         val DAY_START_HOUR = intPreferencesKey("day_start_hour")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val DEFAULT_ALLOWLIST = booleanPreferencesKey("default_allowlist")
+        val NOTHING_NEW_ENABLED = booleanPreferencesKey("nothing_new_enabled")
+        val NOTHING_NEW_SECONDS = intPreferencesKey("nothing_new_seconds")
     }
 
     val settings: Flow<AppSettings> = context.appDataStore.data.map { p ->
@@ -46,14 +55,20 @@ class AppSettingsStore @Inject constructor(
             dayStartHour = (p[Keys.DAY_START_HOUR] ?: 0).coerceIn(0, 23),
             themeMode = runCatching { ThemeMode.valueOf(p[Keys.THEME_MODE] ?: "SYSTEM") }.getOrDefault(ThemeMode.SYSTEM),
             defaultAllowlist = p[Keys.DEFAULT_ALLOWLIST] ?: false,
+            nothingNewEnabled = p[Keys.NOTHING_NEW_ENABLED] ?: false,
+            nothingNewSeconds = (p[Keys.NOTHING_NEW_SECONDS] ?: 30).coerceIn(NOTHING_NEW_MIN, NOTHING_NEW_MAX),
         )
     }
 
-    // Cached snapshot so hot, synchronous paths (usage-period reset, notification timing) can read
-    // the day-start without suspending.
+    // Cached snapshot so hot, synchronous paths (usage-period reset, notification timing, the unlock
+    // guard on the accessibility thread) can read these without suspending.
     @Volatile var dayStartHour: Int = 0
         private set
     @Volatile var defaultAllowlist: Boolean = false
+        private set
+    @Volatile var nothingNewEnabled: Boolean = false
+        private set
+    @Volatile var nothingNewSeconds: Int = 30
         private set
 
     init {
@@ -61,7 +76,15 @@ class AppSettingsStore @Inject constructor(
         settings.onEach {
             dayStartHour = it.dayStartHour
             defaultAllowlist = it.defaultAllowlist
+            nothingNewEnabled = it.nothingNewEnabled
+            nothingNewSeconds = it.nothingNewSeconds
         }.launchIn(scope)
+    }
+
+    companion object {
+        /** Bounds for the nothing-new pause (seconds): long enough to break the reflex, never a lockout. */
+        const val NOTHING_NEW_MIN = 5
+        const val NOTHING_NEW_MAX = 300
     }
 
     suspend fun setDayStartHour(hour: Int) = context.appDataStore.edit {
@@ -74,5 +97,13 @@ class AppSettingsStore @Inject constructor(
 
     suspend fun setDefaultAllowlist(enabled: Boolean) = context.appDataStore.edit {
         it[Keys.DEFAULT_ALLOWLIST] = enabled
+    }
+
+    suspend fun setNothingNewEnabled(enabled: Boolean) = context.appDataStore.edit {
+        it[Keys.NOTHING_NEW_ENABLED] = enabled
+    }
+
+    suspend fun setNothingNewSeconds(seconds: Int) = context.appDataStore.edit {
+        it[Keys.NOTHING_NEW_SECONDS] = seconds.coerceIn(NOTHING_NEW_MIN, NOTHING_NEW_MAX)
     }
 }

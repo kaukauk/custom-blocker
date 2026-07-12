@@ -57,6 +57,8 @@ class BlockerAccessibilityService : AccessibilityService() {
     @Inject lateinit var timeBoundaryScheduler: TimeBoundaryScheduler
     @Inject lateinit var statsRecorder: StatsRecorder
     @Inject lateinit var settingsGate: SettingsAccessGate
+    @Inject lateinit var appSettings: com.customblocker.data.prefs.AppSettingsStore
+    @Inject lateinit var nothingNewGuard: com.customblocker.service.monitoring.NothingNewGuard
 
     /** Fired by [TimeBoundaryScheduler] at a TIME window edge: re-evaluate now + reschedule. */
     private val reevalReceiver = object : BroadcastReceiver() {
@@ -77,10 +79,20 @@ class BlockerAccessibilityService : AccessibilityService() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: android.content.Intent?) {
             when (i?.action) {
-                Intent.ACTION_SCREEN_OFF -> { accrueUsage(); screenOn = false }
+                Intent.ACTION_SCREEN_OFF -> {
+                    accrueUsage(); screenOn = false
+                    // Baseline for the nothing-new pause: everything up to now was on screen, so only
+                    // notifications delivered AFTER this count as "new" at the next unlock.
+                    nothingNewGuard.onScreenOff(System.currentTimeMillis())
+                    // Locking mid-pause cancels it; the next unlock is judged afresh (so you can't
+                    // escape the countdown by pressing power).
+                    overlay.hideCountdown()
+                }
                 // Reset the clock BEFORE re-enabling accrual so a ticker tick that races the wake-up
                 // can't bank the sleep gap (it sees screenOn = false and skips).
                 Intent.ACTION_SCREEN_ON -> { sinceMs = SystemClock.elapsedRealtime(); screenOn = true }
+                // Unlocked, past the lock screen — the moment to judge whether this pickup was prompted.
+                Intent.ACTION_USER_PRESENT -> maybeHoldForNothingNew()
             }
         }
     }
@@ -183,6 +195,7 @@ class BlockerAccessibilityService : AccessibilityService() {
             IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_OFF)
                 addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
             },
             Context.RECEIVER_NOT_EXPORTED,
         )
@@ -725,6 +738,18 @@ class BlockerAccessibilityService : AccessibilityService() {
      * apps still works without the permission; this nudges the user exactly when a popout could slip
      * past its limit. Only touches the notification on an actual state change.
      */
+    /**
+     * The user just got past the lock screen. If NOTHING was delivered while the screen was off, this
+     * pickup wasn't prompted by anything — hold the screen for the configured countdown. If something
+     * did arrive, they're let straight through: there's a real reason to be here.
+     */
+    private fun maybeHoldForNothingNew() {
+        if (!appSettings.nothingNewEnabled) return
+        if (!nothingNewGuard.nothingNewWhileAway()) return
+        L.d(L.OVERLAY, "nothing new while away — holding screen for ${appSettings.nothingNewSeconds}s")
+        overlay.showCountdown(appSettings.nothingNewSeconds)
+    }
+
     private fun updatePopoutPrompt() {
         val pipActive = runCatching { windows.any { it.isInPictureInPictureMode } }.getOrDefault(false)
         val shouldPrompt = pipActive && !Permissions.isNotificationAccessGranted(this)
@@ -742,6 +767,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         super.onDestroy()
         scope.cancel()
         overlay.hide()
+        overlay.hideCountdown()
         runCatching { unregisterReceiver(reevalReceiver) }
         runCatching { unregisterReceiver(screenReceiver) }
         runCatching { unregisterReceiver(enableNotifAccessReceiver) }

@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -104,6 +105,50 @@ fun SettingsScreen(
                             onClick = { viewModel.setThemeMode(mode) },
                             label = { Text(mode.label()) },
                         )
+                    }
+                }
+            }
+
+            HorizontalDivider()
+
+            // --- Nothing-new pause ---
+            Section("Nothing-new pause") {
+                Text(
+                    "Most pickups aren't prompted by anything. When you unlock and nothing arrived " +
+                        "while the screen was off, the screen is held for a countdown — a reflex check " +
+                        "costs you the wait. If a notification did come in, you go straight through.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Pause when nothing's new", style = MaterialTheme.typography.bodyLarge)
+                    Switch(
+                        checked = settings.nothingNewEnabled,
+                        onCheckedChange = viewModel::setNothingNewEnabled,
+                    )
+                }
+                if (settings.nothingNewEnabled) {
+                    Text(
+                        "How long to hold the screen",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = { viewModel.setNothingNewSeconds(settings.nothingNewSeconds - 5) }) {
+                            Icon(Icons.Default.Remove, contentDescription = "Shorter")
+                        }
+                        Text(formatSeconds(settings.nothingNewSeconds), style = MaterialTheme.typography.headlineSmall)
+                        IconButton(onClick = { viewModel.setNothingNewSeconds(settings.nothingNewSeconds + 5) }) {
+                            Icon(Icons.Default.Add, contentDescription = "Longer")
+                        }
                     }
                 }
             }
@@ -215,6 +260,14 @@ private fun ThemeMode.label() = when (this) {
     ThemeMode.SYSTEM -> "System"
     ThemeMode.LIGHT -> "Light"
     ThemeMode.DARK -> "Dark"
+}
+
+/** "30s" / "1m" / "1m 30s" — the nothing-new pause length. */
+private fun formatSeconds(seconds: Int): String {
+    if (seconds < 60) return "${seconds}s"
+    val m = seconds / 60
+    val s = seconds % 60
+    return if (s == 0) "${m}m" else "${m}m ${s}s"
 }
 
 private fun formatHour(hour: Int): String {
