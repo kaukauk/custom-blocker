@@ -27,7 +27,10 @@ class AppPickerViewModel @Inject constructor(
 
     private val profileId: Long = savedStateHandle.get<Long>("profileId") ?: 0L
 
+    // Launchable apps are the default browse list; the full installed set (incl. apps with no
+    // launcher icon) is what a typed search matches against, so you can add anything by name.
     private val allApps = MutableStateFlow<List<InstalledApp>>(emptyList())
+    private val installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
     val query = MutableStateFlow("")
 
     /** While locked: blocklist allows add-only, allowlist allows remove-only. */
@@ -45,13 +48,29 @@ class AppPickerViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     val visibleApps: StateFlow<List<InstalledApp>> =
-        combine(allApps, query) { list, q ->
-            if (q.isBlank()) list
-            else list.filter { it.label.contains(q, true) || it.packageName.contains(q, true) }
+        combine(allApps, installedApps, query) { launchable, installed, q ->
+            // Blank query → the tidy launchable list. Typing → search the full installed set so apps
+            // without a launcher icon show up too.
+            if (q.isBlank()) launchable
+            else installed.filter { it.label.contains(q, true) || it.packageName.contains(q, true) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * A raw package name the user typed that isn't already in the visible results — offered as an
+     * "add anyway" so an app that isn't installed (or is hidden) can still be added by package. Only a
+     * package-shaped string (a dotted id, no spaces) qualifies; a plain name with no match resolves to
+     * nothing rather than storing an unmatchable label.
+     */
+    val typedPackage: StateFlow<String?> =
+        combine(visibleApps, query) { visible, q ->
+            val t = q.trim()
+            val looksLikePackage = t.contains('.') && t.none { it.isWhitespace() }
+            if (looksLikePackage && visible.none { it.packageName.equals(t, ignoreCase = true) }) t else null
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
         viewModelScope.launch { allApps.value = lister.launchableApps() }
+        viewModelScope.launch { installedApps.value = lister.installedApps() }
     }
 
     fun setQuery(q: String) { query.value = q }

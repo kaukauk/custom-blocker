@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -41,6 +42,7 @@ fun AppPickerScreen(
     val query by viewModel.query.collectAsStateWithLifecycle()
     val editLocked by viewModel.editLocked.collectAsStateWithLifecycle()
     val allowlist by viewModel.isAllowlist.collectAsStateWithLifecycle()
+    val typedPackage by viewModel.typedPackage.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -58,11 +60,37 @@ fun AppPickerScreen(
             OutlinedTextField(
                 value = query,
                 onValueChange = viewModel::setQuery,
-                label = { Text("Search apps") },
+                label = { Text("Search, or type an app name / package") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
             )
             LazyColumn(Modifier.fillMaxSize()) {
+                // A package the user typed that isn't in the results — add it directly (e.g. an app
+                // with no launcher icon, or one not installed yet). Only shown for add-permitted state.
+                typedPackage?.let { pkg ->
+                    if (viewModel.canToggle(add = true)) {
+                        item(key = "typed:$pkg") {
+                            androidx.compose.foundation.layout.Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.toggle(pkg, add = true); viewModel.setQuery("") }
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Column(Modifier.weight(1f)) {
+                                    Text("Add \"$pkg\"", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        "Add this package directly",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 items(apps, key = { it.packageName }) { app ->
                     val isSelected = app.packageName in selected
                     // Locked: blocklist may only add (check); allowlist may only remove (uncheck).

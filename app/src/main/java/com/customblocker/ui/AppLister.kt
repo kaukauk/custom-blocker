@@ -40,6 +40,20 @@ class AppLister @Inject constructor(
             .sortedBy { it.label.lowercase() }
     }
 
+    /**
+     * Every installed app (not just the launchable ones), so a name search can surface apps with no
+     * launcher icon — services, system apps, etc. — that [launchableApps] leaves out. Sorted by label,
+     * self excluded.
+     */
+    suspend fun installedApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
+        val pm = context.packageManager
+        pm.getInstalledApplications(0)
+            .map { InstalledApp(it.packageName, pm.getApplicationLabel(it).toString()) }
+            .filter { it.packageName != context.packageName }
+            .distinctBy { it.packageName }
+            .sortedBy { it.label.lowercase() }
+    }
+
     /** Whether [packageName] is currently installed (so the UI can group uninstalled-but-targeted apps). */
     fun isInstalled(packageName: String): Boolean =
         try {
