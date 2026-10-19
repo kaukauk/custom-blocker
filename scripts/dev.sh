@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Dev helper for the Custom Blocker project.
-# Encodes the build -> install -> drive -> observe loop from PLAN.md §15-16.
+# Encodes the build -> install -> drive -> observe loop from docs/PLAN.md §15-16.
 #
 # Usage:  source scripts/dev.sh   (then call the functions)  OR  scripts/dev.sh <cmd>
 #
@@ -54,7 +54,7 @@ install()  { cd "$PROJECT_DIR" && ./gradlew :app:installDebug; }
 run()      { adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 >/dev/null; }
 unit()     { cd "$PROJECT_DIR" && ./gradlew :app:testDebugUnitTest; }
 
-# Tagged decision logs are the PRIMARY test signal (see PLAN.md §15).
+# Tagged decision logs are the PRIMARY test signal (see docs/PLAN.md §15).
 logcat()   { adb logcat -s "BlockEngine:*" "FgDetect:*" "Overlay:*" "Cond:*" "${@:-}"; }
 
 # Bring a target app to the foreground from CLI (for blocking tests).
